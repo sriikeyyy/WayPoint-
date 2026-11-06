@@ -1,0 +1,1776 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+</head>
+<body>
+<title>Waypoint Planner</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: control column (compose → pipeline → saved) beside a plan sheet; stacks on phones. */
+:root {
+  --bg: #EDF1EF; --surface: #FFFFFF; --sunk: #E3E9E6; --ink: #13211E; --muted: #5A6B67; --line: #D3DCD8;
+  --accent: #1C6B58; --accent-2: #D9EDE6; --amber: #A86A12;
+  --ok: #2B7A4B; --warn: #A86A12; --fail: #B23A2A;
+  --c0: #1C6B58; --c1: #3D8FB0; --c2: #A86A12; --c3: #8A5BA8; --c4: #C2563F; --c5: #6E7F7A;
+  --f-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0E1513; --surface: #151F1C; --sunk: #1B2723; --ink: #E3EBE8; --muted: #93A49F; --line: #2A3733;
+  --accent: #4FB394; --accent-2: #1D3A31; --amber: #D9A441; --ok: #5DBB84; --warn: #D9A441; --fail: #E3765F;
+  --c0: #4FB394; --c1: #6BB6D6; --c2: #D9A441; --c3: #B48BD0; --c4: #E3765F; --c5: #8FA19C; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0E1513; --surface: #151F1C; --sunk: #1B2723; --ink: #E3EBE8; --muted: #93A49F; --line: #2A3733;
+  --accent: #4FB394; --accent-2: #1D3A31; --amber: #D9A441; --ok: #5DBB84; --warn: #D9A441; --fail: #E3765F;
+  --c0: #4FB394; --c1: #6BB6D6; --c2: #D9A441; --c3: #B48BD0; --c4: #E3765F; --c5: #8FA19C; color-scheme: dark }
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.5 var(--f-body); }
+.wrap { max-width: 1320px; margin: 0 auto; padding-block: 20px 40px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+.brand { font: 700 26px/1 var(--f-display); letter-spacing: -0.02em; margin: 0; }
+.brand small { font: 500 12px var(--f-mono); color: var(--muted); letter-spacing: 0.04em; margin-left: 10px; text-transform: uppercase; }
+.sub { color: var(--muted); max-width: 64ch; margin: 6px 0 0; }
+.grid { display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 900px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; }
+h3 { font: 600 11px/1.3 var(--f-mono); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 10px; }
+.muted { color: var(--muted); } .sm { font-size: 13px; }
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* compose */
+label.lbl0 { display: block; font: 600 13px var(--f-body); margin-bottom: 6px; }
+textarea { width: 100%; min-height: 128px; resize: vertical; font: 15px/1.5 var(--f-body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+textarea:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-2); }
+.exs { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 12px; }
+.exs button { border: 1px dashed var(--line); background: transparent; border-radius: 999px; padding: 3px 10px; font-size: 12.5px; color: var(--muted); text-align: left; }
+.exs button:hover { color: var(--ink); border-color: var(--accent); }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.primary { background: var(--accent); color: var(--surface); border: 0; border-radius: 8px; padding: 9px 16px; font-weight: 600; }
+.primary:disabled { opacity: .55; cursor: progress; }
+.ghost { background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; }
+.ghost.danger { border-color: var(--fail); color: var(--fail); }
+.chk { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+.note { margin-top: 10px; padding: 8px 10px; border-radius: 6px; background: var(--sunk); font-size: 13px; }
+.engine { display: flex; align-items: center; gap: 6px; font: 12px var(--f-mono); color: var(--muted); }
+details.cfg { margin-top: 10px; font-size: 13px; }
+details.cfg summary { cursor: pointer; color: var(--muted); }
+.cfgf { display: grid; gap: 6px; margin-top: 8px; }
+.cfgf input { font: 13px var(--f-mono); padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); width: 100%; }
+
+/* pipeline */
+.trace { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.trace li { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; align-items: start; padding: 5px 0; position: relative; }
+.trace li:not(:last-child)::after { content: ""; position: absolute; left: 12px; top: 30px; bottom: -6px; width: 2px; background: var(--line); }
+.dot { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; font: 600 12px var(--f-mono); color: var(--muted); background: var(--surface); position: relative; z-index: 1; }
+.st-run .dot { border-color: var(--accent); border-top-color: transparent; animation: spin .8s linear infinite; }
+.st-ok .dot { background: var(--ok); border-color: var(--ok); color: var(--surface); }
+.st-warn .dot { background: var(--warn); border-color: var(--warn); color: var(--surface); }
+.st-fail .dot { background: var(--fail); border-color: var(--fail); color: var(--surface); }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .st-run .dot { animation: none; border-top-color: var(--accent); } }
+.tl { font-weight: 500; line-height: 26px; }
+.tn { font-size: 12.5px; color: var(--muted); margin-top: -2px; overflow-wrap: anywhere; }
+.layer { font: 500 10px var(--f-mono); text-transform: uppercase; letter-spacing: .06em; padding: 1px 5px; border-radius: 4px; margin-left: 4px; vertical-align: 1px; }
+.l-neural { background: var(--accent-2); color: var(--accent); }
+.l-symbolic { background: var(--sunk); color: var(--muted); }
+.l-loop, .l-storage { border: 1px solid var(--line); color: var(--muted); }
+
+/* saved */
+.saved { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.saved button { width: 100%; display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 8px; align-items: center; text-align: left; background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 6px 8px; }
+.saved button:hover, .saved button.on { background: var(--sunk); }
+.sn { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sd { font: 12px var(--f-mono); color: var(--muted); }
+.vd { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+.v-pass.vd { background: var(--ok); } .v-warn.vd { background: var(--warn); } .v-fail.vd { background: var(--fail); }
+
+/* plan */
+.plan { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; min-width: 0; overflow: hidden; }
+.ph { padding: 20px 22px 14px; border-bottom: 1px solid var(--line); }
+.ph-top { display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap; }
+.eyebrow { font: 12px var(--f-mono); color: var(--muted); }
+.tag-ex { background: var(--amber); color: var(--surface); padding: 1px 6px; border-radius: 4px; font-weight: 500; }
+.verdict { font: 600 12px var(--f-mono); padding: 4px 10px; border-radius: 999px; border: 1.5px solid; }
+.verdict.v-pass { color: var(--ok); } .verdict.v-warn { color: var(--warn); } .verdict.v-fail { color: var(--fail); }
+.pt { font: 700 clamp(22px, 3vw, 30px)/1.15 var(--f-display); letter-spacing: -0.02em; margin: 10px 0 14px; text-wrap: balance; }
+.trips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+.trips button { display: flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: transparent; border-radius: 6px; padding: 5px 10px; font-size: 13px; }
+.trips button[aria-selected="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.board { display: flex; align-items: stretch; gap: 0; overflow-x: auto; background: var(--ink); color: var(--bg); border-radius: 8px; padding: 12px 14px; scrollbar-width: thin; }
+.stn { display: flex; flex-direction: column; min-width: 64px; flex: none; }
+.code { font: 600 22px/1 var(--f-mono); letter-spacing: 0.06em; }
+.cn { font-size: 12px; opacity: .8; margin-top: 4px; white-space: nowrap; }
+.nt { font: 11px var(--f-mono); color: var(--amber); margin-top: 2px; white-space: nowrap; }
+.arr { align-self: flex-start; font: 11px var(--f-mono); opacity: .65; padding: 6px 12px 0; position: relative; flex: none; min-width: 56px; text-align: center; }
+.arr::after { content: ""; position: absolute; left: 8px; right: 8px; top: 22px; border-top: 1.5px dashed currentColor; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px 16px; margin: 14px 0 0; }
+.facts div { min-width: 0; } .facts dt { font: 11px var(--f-mono); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); } .facts dd { margin: 0; font-weight: 500; text-transform: none; }
+.tabs { display: flex; gap: 2px; padding: 0 14px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tabs button { background: none; border: 0; padding: 12px 10px 10px; border-bottom: 2px solid transparent; color: var(--muted); font-weight: 500; white-space: nowrap; }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.cnt { font: 11px var(--f-mono); background: var(--sunk); padding: 1px 5px; border-radius: 4px; margin-left: 3px; }
+.tabpane { padding: 18px 22px 22px; }
+.pf { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 22px; border-top: 1px solid var(--line); font-size: 13px; }
+.empty { padding: 60px 22px; text-align: center; } .empty h2 { font: 700 22px var(--f-display); margin: 0 0 6px; } .empty.sm { padding: 24px; }
+.cap { color: var(--muted); font-size: 13px; max-width: 70ch; margin: 10px 0 14px; }
+
+/* itinerary */
+.days { display: grid; gap: 14px; }
+.day { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.dh { display: flex; align-items: center; gap: 14px; padding: 10px 14px; background: var(--sunk); flex-wrap: wrap; }
+.dd { display: flex; flex-direction: column; min-width: 92px; }
+.dn { font: 11px var(--f-mono); color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.dt { font: 700 17px/1.1 var(--f-display); }
+.dc { flex: 1; font-weight: 500; min-width: 0; }
+.trv { color: var(--accent); font-weight: 600; }
+.dcost { font: 13px var(--f-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.items { list-style: none; margin: 0; padding: 4px 0; }
+.items li { display: grid; grid-template-columns: 58px minmax(0, 1fr) auto 84px; gap: 12px; align-items: baseline; padding: 7px 14px; border-left: 3px solid transparent; }
+.items li + li { border-top: 1px dashed var(--line); }
+.items .ty-transit { border-left-color: var(--c1); } .items .ty-sight { border-left-color: var(--c0); } .items .ty-food { border-left-color: var(--c2); }
+.items .ty-activity { border-left-color: var(--c3); } .items .ty-checkin, .items .ty-rest { border-left-color: var(--c5); }
+.tm { font: 500 13px var(--f-mono); font-variant-numeric: tabular-nums; display: flex; flex-direction: column; line-height: 1.25; }
+.tm i { font-style: normal; color: var(--muted); font-size: 11.5px; }
+.it { font-weight: 500; } .ip { font-size: 12.5px; color: var(--muted); }
+.chip { font: 10.5px var(--f-mono); text-transform: uppercase; letter-spacing: .05em; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; }
+.ic { font: 12.5px var(--f-mono); text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+.auto { font: 10.5px var(--f-mono); color: var(--warn); border: 1px solid var(--warn); border-radius: 4px; padding: 0 4px; }
+.items .none { color: var(--muted); display: block; }
+@media (max-width: 560px) { .items li { grid-template-columns: 52px minmax(0, 1fr); } .chip, .ic { grid-column: 2; justify-self: start; } .ic { text-align: left; } .tabpane, .ph { padding-left: 14px; padding-right: 14px; } }
+.tips { margin-top: 18px; padding: 14px 16px; background: var(--sunk); border-radius: 8px; }
+.tips ul { margin: 0; padding-left: 18px; }
+
+/* tasks */
+.dagwrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); padding: 6px; }
+.dagwrap svg { display: block; }
+.edge { fill: none; stroke: var(--muted); stroke-width: 1.2; opacity: .55; }
+.ahd { fill: var(--muted); }
+.node rect { fill: var(--surface); stroke: var(--line); stroke-width: 1.2; }
+.node.n-urgent rect { stroke: var(--warn); stroke-width: 2; } .node.n-late rect { stroke: var(--warn); stroke-width: 2; stroke-dasharray: 4 3; } .node.n-infeasible rect { stroke: var(--fail); stroke-width: 2; }
+.node.n-done rect { fill: var(--accent-2); stroke: var(--accent); }
+.nid { font: 10.5px var(--f-mono); fill: var(--muted); } .nt2 { font: 500 12px var(--f-body); fill: var(--ink); }
+.tt { width: 100%; border-collapse: collapse; font-size: 13.5px; display: block; overflow-x: auto; }
+.tt thead, .tt tbody { display: table; width: 100%; min-width: 620px; table-layout: auto; }
+.tt th { text-align: left; font: 500 11px var(--f-mono); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.tt td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.tt td:first-child, .tt th:first-child { width: 30px; }
+.tt label { cursor: pointer; display: block; font-weight: 500; }
+.tt .st { font: 11.5px var(--f-mono); color: var(--muted); }
+.tt .s-late .st { color: var(--warn); } .tt .s-infeasible .st { color: var(--fail); } .tt .s-urgent .st { color: var(--warn); }
+.tt .done label { text-decoration: line-through; color: var(--muted); }
+.num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.deps code, .rules code { font: 11.5px var(--f-mono); background: var(--sunk); padding: 0 4px; border-radius: 3px; }
+abbr { text-decoration: underline dotted; cursor: help; font-family: var(--f-mono); font-size: 12px; }
+input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; }
+
+/* verification */
+.checks ul { list-style: none; margin: 0 0 18px; padding: 0; }
+.ck { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.cki { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font: 700 12px var(--f-mono); color: var(--surface); }
+.c-pass .cki { background: var(--ok); } .c-warn .cki { background: var(--warn); } .c-fail .cki { background: var(--fail); }
+.ckl { font-weight: 600; } .ckd { margin: 2px 0 0 !important; font-size: 13px; color: var(--muted); }
+.ckd li { padding: 1px 0; overflow-wrap: anywhere; }
+.cols2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
+.log, .rules { margin: 0; padding-left: 18px; font-size: 13px; } .rules { list-style: none; padding: 0; } .rules li { padding: 3px 0; }
+.qs { margin-top: 18px; padding: 12px 14px; border: 1px solid var(--warn); border-radius: 8px; } .qs ul { margin: 0; padding-left: 18px; }
+
+/* budget */
+.bnum { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; margin-bottom: 18px; }
+.bnum .lbl { display: block; font: 11px var(--f-mono); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.big { font: 700 24px var(--f-display); font-variant-numeric: tabular-nums; }
+.bar { position: relative; display: flex; height: 22px; border-radius: 5px; background: var(--sunk); margin: 26px 0 14px; }
+.seg { height: 100%; } .seg:first-child { border-radius: 5px 0 0 5px; }
+.s0 { background: var(--c0); } .s1 { background: var(--c1); } .s2 { background: var(--c2); } .s3 { background: var(--c3); } .s4 { background: var(--c4); } .s5 { background: var(--c5); }
+.capline { position: absolute; top: -8px; bottom: -6px; border-left: 2px solid var(--ink); }
+.capline i { position: absolute; top: -16px; left: -20px; font: normal 10.5px var(--f-mono); color: var(--ink); }
+.legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-width: 420px; }
+.legend li { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto 44px; gap: 10px; align-items: center; }
+.sw { width: 12px; height: 12px; border-radius: 3px; } .lk { text-transform: capitalize; } .legend .num:last-child { text-align: right; }
+.verdict-line { font-weight: 600; margin: 16px 0 4px; } .verdict-line.c-pass { color: var(--ok); } .verdict-line.c-warn { color: var(--warn); }
+
+/* spec */
+.json { background: var(--sunk); border-radius: 8px; padding: 14px; font: 12px/1.5 var(--f-mono); overflow-x: auto; max-height: 520px; }
+.inputs ol { padding-left: 18px; font-size: 13.5px; } .inputs li { margin-bottom: 8px; }
+
+/* places */
+.pl { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.pl-card { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; min-width: 0; }
+.pl-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.pl-h h4 { margin: 0; font: 600 14px var(--f-body); }
+.pl-src { font: 10.5px var(--f-mono); text-transform: uppercase; letter-spacing: .05em; border-radius: 4px; padding: 1px 6px; }
+.pl-src.s-kb { background: var(--accent-2); color: var(--accent); }
+.pl-src.s-model { border: 1px solid var(--warn); color: var(--warn); }
+.pl-src.s-none { border: 1px solid var(--line); color: var(--muted); }
+.pl-card ol { margin: 0; padding-left: 20px; display: grid; gap: 8px; }
+.pl-n { font-weight: 500; }
+.pl-p { display: flex; gap: 10px; flex-wrap: wrap; font: 13px var(--f-mono); }
+.pl-note { font-size: 12.5px; }
+.pl-total { margin: 16px 0 4px; }
+
+/* account */
+.who { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+.who .ghost { padding: 4px 10px; font-size: 13px; }
+.auth { max-width: 400px; margin: 24px auto; padding: 24px; }
+.auth h2 { font: 700 22px var(--f-display); margin: 0 0 4px; }
+.auth form { display: flex; flex-direction: column; gap: 6px; }
+.auth input { font: 15px var(--f-body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; width: 100%; }
+.auth input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-2); }
+.auth-actions { margin-top: 10px; justify-content: space-between; }
+.primary:disabled { opacity: .6; cursor: progress; }
+
+/* print / PDF: only the print copy, black on white whatever the theme */
+.print-only { display: none; }
+@media print {
+  @page { margin: 14mm; }
+  html, body { background: #fff !important; color: #000 !important; }
+  .wrap { display: none !important; }
+  .print-only { display: block; font: 10.5pt/1.45 var(--f-body); color: #000; }
+  .print-only h1 { font: 700 20pt var(--f-display); margin: 0; }
+  .print-only h2 { font: 700 15pt var(--f-display); margin: 0 0 2pt; }
+  .print-only h3 { font: 600 9pt var(--f-mono); text-transform: uppercase; letter-spacing: .06em; color: #444; margin: 14pt 0 4pt; }
+  .print-only h4 { font-size: 10.5pt; margin: 8pt 0 2pt; }
+  .print-only table { width: 100%; border-collapse: collapse; }
+  .print-only td, .print-only th { border-bottom: 0.5pt solid #bbb; padding: 3pt 4pt; text-align: left; vertical-align: top; }
+  .print-only small { color: #555; }
+  .pr-head { border-bottom: 1.5pt solid #000; padding-bottom: 6pt; margin-bottom: 10pt; } .pr-head p { margin: 2pt 0 0; color: #444; }
+  .pr-trip + .pr-trip { break-before: page; }
+  .pr-route { font-weight: 600; margin: 0 0 6pt; }
+  .pr-facts th { width: 16%; color: #444; font-weight: 500; }
+  .pr-day { break-inside: avoid; }
+  .pr-tm { width: 90pt; white-space: nowrap; font-family: var(--f-mono); } .pr-ty { width: 60pt; color: #555; } .pr-num { text-align: right; white-space: nowrap; }
+  .pr-tasks tr, .pr-budget tr { break-inside: avoid; } .pr-total td { font-weight: 700; border-top: 1pt solid #000; }
+  .pr-foot { margin-top: 14pt; color: #555; font-size: 9pt; }
+}
+</style>
+
+<div class="wrap">
+  <div class="top">
+    <div>
+      <h1 class="brand">Waypoint <small>neuro-symbolic trip planner</small></h1>
+      <p class="sub">A language model reads what you want. A rule engine turns it into a dependency-checked task graph and a verified day plan, then saves it.</p>
+    </div>
+    <div class="who" id="who" hidden><span class="muted">Signed in as</span> <b id="whoName"></b><button class="ghost" id="logout" type="button">Log out</button></div>
+  </div>
+  <section class="auth panel" id="auth" hidden>
+    <form id="authForm">
+      <h2 id="authTitle">Log in to Waypoint</h2>
+      <p class="muted sm">Your plans are saved to your account on this Waypoint server.</p>
+      <label class="lbl0" for="authUser">Username</label>
+      <input id="authUser" autocomplete="username" autocapitalize="none" spellcheck="false" required minlength="3" maxlength="32">
+      <label class="lbl0" for="authPass">Password</label>
+      <input id="authPass" type="password" autocomplete="current-password" required>
+      <p class="muted sm" id="authHint" hidden>3–32 characters for the username (letters, numbers, . _ -). At least 8 characters for the password.</p>
+      <div class="note" id="authErr" role="alert" hidden></div>
+      <div class="row auth-actions"><button class="primary" id="authGo" type="submit">Log in</button><button class="ghost" id="authSwitch" type="button">Create an account</button></div>
+    </form>
+  </section>
+  <div class="grid" id="app">
+    <aside class="side">
+      <form class="panel" id="form">
+        <label class="lbl0" for="q">Describe your trip</label>
+        <textarea id="q" placeholder="e.g. From Bengaluru to Tokyo and Kyoto for 8 nights from 28 March, 2 adults, ₹3 lakh total, food and temples, moderate pace"></textarea>
+        <div class="exs" aria-label="Examples">
+          <button type="button" data-ex="Chennai to Goa for a long weekend next month, 4 friends, ₹15k each, beaches and nightlife">Goa long weekend</button>
+          <button type="button" data-ex="From Bengaluru: 4 nights in Tokyo then 3 in Kyoto by train, starting 28 March, solo, ₹2.5 lakh, food and temples, packed pace">Tokyo + Kyoto</button>
+          <button type="button" data-ex="Two trips: Delhi to Jaipur and Udaipur for 5 days in mid-December with my parents, relaxed. Separately, Rishikesh for 3 nights in February for rafting, 2 adults, ₹25k">Two trips at once</button>
+        </div>
+        <div class="row" id="refineRow" hidden><label class="chk"><input type="checkbox" id="refine"> Refine the open plan instead of starting a new one</label></div>
+        <div class="row" style="margin-top:10px; justify-content:space-between">
+          <div class="row"><button class="primary" id="go" type="submit">Plan it</button><button class="ghost" id="stop" type="button" hidden>Stop</button></div>
+          <span class="engine" id="engine">—</span>
+        </div>
+        <div class="note" id="note" hidden></div>
+        <details class="cfg" id="cfg" hidden>
+          <summary>Connect a language model</summary>
+          <p class="muted sm">When opened outside Claude, point this at any OpenAI-compatible endpoint, such as Ollama on this computer. The key stays in this browser.</p>
+          <div class="cfgf">
+            <input id="cfgEp" placeholder="http://localhost:11434/v1" autocomplete="off">
+            <input id="cfgModel" placeholder="qwen2.5:7b" autocomplete="off">
+            <input id="cfgKey" type="password" placeholder="API key (leave blank for Ollama)" autocomplete="off">
+            <button class="ghost" id="saveCfg" type="button">Save and test connection</button>
+            <div class="note" id="cfgOut" hidden></div>
+          </div>
+        </details>
+      </form>
+      <section class="panel">
+        <h3>Pipeline</h3>
+        <ol class="trace" id="trace"></ol>
+      </section>
+      <section class="panel">
+        <h3>Saved plans · <span id="storeMode">…</span></h3>
+        <ul class="saved" id="saved"></ul>
+      </section>
+    </aside>
+    <main class="plan" id="plan"></main>
+  </div>
+</div>
+<div id="print" class="print-only"></div>
+<script>
+/* ================================================================
+   WAYPOINT ENGINE — pure, deterministic, testable (no DOM, no network)
+   Layers:
+     D        date algebra on ISO strings (UTC-noon free, integer days)
+     KB       knowledge base: lead times, pace caps, rule catalogue
+     normalizeSpec   schema validation + repair of LLM interpretation
+     daySkeleton     fixed day/city/travel frame the LLM must fill
+     buildTasks      rule instantiation -> task DAG
+     schedule        Kahn topo sort + backward CPM deadline pass
+     verifyItinerary constraint checks on LLM itinerary
+     autoFixItinerary deterministic last-resort repair
+     tripChecks      verdict table
+     ruleParse / templateItinerary   offline fallback (no LLM)
+   ================================================================ */
+
+const D = {
+  parse(s) {
+    if (typeof s !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+    const [y, m, d] = s.split("-").map(Number);
+    const t = Date.UTC(y, m - 1, d);
+    const x = new Date(t);
+    if (x.getUTCFullYear() !== y || x.getUTCMonth() !== m - 1 || x.getUTCDate() !== d) return null;
+    return t;
+  },
+  iso(t) { return new Date(t).toISOString().slice(0, 10); },
+  add(s, n) { return D.iso(D.parse(s) + n * 864e5); },
+  diff(a, b) { return Math.round((D.parse(b) - D.parse(a)) / 864e5); }, // b - a in days
+  today() {
+    const d = new Date();
+    const p = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  },
+  MON: ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"],
+  DOW: ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"],
+  fmt(s) { const t = D.parse(s); if (t == null) return s || "—"; const x = new Date(t); return `${x.getUTCDate()} ${D.MON[x.getUTCMonth()]}`; },
+  fmtY(s) { const t = D.parse(s); if (t == null) return s || "—"; const x = new Date(t); return `${x.getUTCDate()} ${D.MON[x.getUTCMonth()]} ${x.getUTCFullYear()}`; },
+  dow(s) { const t = D.parse(s); return t == null ? "" : D.DOW[new Date(t).getUTCDay()]; },
+};
+
+const KB = {
+  paceCap: { relaxed: 7, moderate: 9, packed: 11 }, // active hours/day, excl. transit & rest
+  lead: { scope: 45, passport: 60, entry: 50, visa: 30, legIntl: 30, legDom: 21, stay: 21,
+          insurance: 14, forex: 5, activities: 10, docs: 2, pack: 1,
+          scopeDom: 21, stayDom: 14 }, // domestic trips need less runway
+
+  effort: { visa: 15 },
+  modes: ["flight", "train", "bus", "car", "ferry"],
+  aliases: { usa: "united states", us: "united states", "u.s.": "united states", america: "united states",
+             uk: "united kingdom", england: "united kingdom", scotland: "united kingdom", britain: "united kingdom",
+             uae: "united arab emirates", dubai: "united arab emirates", bharat: "india", holland: "netherlands" },
+  currency: { india: "INR", "united states": "USD", "united kingdom": "GBP", "united arab emirates": "AED",
+              japan: "JPY", singapore: "SGD", thailand: "THB", malaysia: "MYR", indonesia: "IDR",
+              "sri lanka": "LKR", nepal: "NPR", australia: "AUD", canada: "CAD", switzerland: "CHF",
+              france: "EUR", germany: "EUR", italy: "EUR", spain: "EUR", netherlands: "EUR",
+              portugal: "EUR", greece: "EUR", austria: "EUR", vietnam: "VND", maldives: "MVR",
+              "south korea": "KRW", china: "CNY", turkey: "TRY", bhutan: "BTN" },
+  cityCountry: Object.fromEntries([
+    ...["chennai","bengaluru","bangalore","mumbai","delhi","new delhi","kolkata","hyderabad","pune","ahmedabad","jaipur","udaipur","jodhpur","jaisalmer","agra","varanasi","rishikesh","haridwar","goa","panaji","kochi","cochin","munnar","alleppey","alappuzha","thekkady","wayanad","kovalam","trivandrum","thiruvananthapuram","ooty","kodaikanal","coonoor","pondicherry","puducherry","madurai","mysuru","mysore","coorg","madikeri","hampi","gokarna","shimla","manali","leh","srinagar","gulmarg","darjeeling","gangtok","shillong","amritsar","chandigarh","dharamshala","nainital","mussoorie","andaman","port blair","vellore","mahabalipuram","rameswaram","kanyakumari","tirupati","visakhapatnam","lucknow","bhopal","indore","khajuraho","ranthambore","pushkar","mount abu","lonavala","mahabaleshwar","katpadi","coimbatore","trichy","thanjavur"].map((c) => [c, "india"]),
+    ["tokyo","japan"],["kyoto","japan"],["osaka","japan"],["paris","france"],["nice","france"],["london","united kingdom"],["edinburgh","united kingdom"],["dubai","united arab emirates"],["abu dhabi","united arab emirates"],["singapore","singapore"],["bangkok","thailand"],["phuket","thailand"],["bali","indonesia"],["kuala lumpur","malaysia"],["colombo","sri lanka"],["kathmandu","nepal"],["male","maldives"],["rome","italy"],["venice","italy"],["florence","italy"],["barcelona","spain"],["madrid","spain"],["amsterdam","netherlands"],["berlin","germany"],["munich","germany"],["zurich","switzerland"],["interlaken","switzerland"],["new york","united states"],["san francisco","united states"],["sydney","australia"],["melbourne","australia"],["seoul","south korea"],["istanbul","turkey"],["hanoi","vietnam"],["thimphu","bhutan"],
+  ]),
+  rules: {
+    R1: "Every trip starts from a confirmed scope: dates, travellers and budget.",
+    R2: "Crossing a border needs a passport valid 6+ months past the return date.",
+    R3: "Entry rules must be known before any booking is committed.",
+    R4: "Each transport leg is booked once scope (and entry rules) are settled; international legs need a longer lead.",
+    R5: "A stay is booked after the leg that arrives there, so check-in matches arrival.",
+    R6: "Visa applications usually need booked itineraries as proof and take ~15 days to process.",
+    R7: "Travel insurance is bought once the outbound journey is fixed.",
+    R8: "Different home and destination currencies require arranging forex or a travel card.",
+    R9: "Timed-entry attractions are pre-booked once stays are fixed.",
+    R10: "Tickets, confirmations and offline maps are gathered after all bookings.",
+    R11: "Packing comes last and depends on finalized documents.",
+  },
+};
+
+const arr = (v) => (Array.isArray(v) ? v : []);
+const str = (v) => (typeof v === "string" && v.trim() ? v.trim() : null);
+const toInt = (v) => { if (v === null || v === undefined || v === "") return null; const n = Number(v); return Number.isFinite(n) ? Math.round(n) : null; };
+const titleCase = (s) => s.replace(/\b([a-z])/g, (m) => m.toUpperCase());
+function normCountry(c) { const s = str(c); if (!s) return null; const k = s.toLowerCase(); return KB.aliases[k] || k; }
+function normMode(m) { const s = str(m); if (!s) return null; const k = s.toLowerCase(); if (/fl(y|ight)|air|plane/.test(k)) return "flight"; if (/train|rail/.test(k)) return "train"; if (/bus|coach/.test(k)) return "bus"; if (/car|cab|taxi|drive|road/.test(k)) return "car"; if (/ferry|boat|ship/.test(k)) return "ferry"; return null; }
+
+/* ---------------- Places knowledge: top 3 per interest, approx. price per person in local currency ---------------- */
+// interest words → category (first match wins); trips with no matching interest get sights + food
+KB.categories = {
+  nightlife: /nightlife|night life|party|parties|club|bar|pub/i,
+  beaches: /beach|\bsea\b|coast/i,
+  food: /food|cuisine|eat|cafe|seafood|dining|restaurant/i,
+  adventure: /adventure|rafting|bungee|trek|hiking|scuba|diving|water ?sport|paraglid/i,
+  nature: /nature|hill|waterfall|tea|wildlife|backwater|lake|garden|scenery|national park/i,
+  sights: /sight|temple|heritage|histor|culture|museum|fort|palace|architect|shrine/i,
+};
+KB.defaultCategories = ["sights", "food"];
+// [name, area, min, max, note]. Prices are rough guides for planning, not quotes; Indian sites list the Indian-national rate first.
+KB.places = {
+  goa: {
+    nightlife: [["Tito's Lane (Tito's, Mambo's)", "Baga", 1000, 2500, "Cover charge, usually redeemable against drinks"],
+                ["Club Cubana", "Arpora hilltop", 1500, 3000, "Entry often includes drinks; busiest on weekends"],
+                ["LPK Waterfront", "Nerul riverside", 1000, 2500, "Cover charge on party nights"]],
+    beaches: [["Baga & Calangute beach", "North Goa", 0, 2500, "Beach is free; water sports about ₹500–2,500 per ride"],
+              ["Palolem Beach", "South Goa", 0, 1500, "Free; kayaking or dolphin boat trips about ₹500–1,500"],
+              ["Anjuna & Vagator beaches", "North Goa", 0, 1000, "Free; Anjuna flea market on Wednesdays"]],
+    food: [["Britto's", "Baga", 800, 1800, "Goan seafood on the beach"],
+           ["Fisherman's Wharf", "Cavelossim / Panjim", 1000, 2000, "Goan and coastal food"],
+           ["Thalassa", "Siolim", 1500, 3000, "Greek food, sunset views; book ahead"]],
+    sights: [["Basilica of Bom Jesus", "Old Goa", 0, 0, "Free; modest dress"],
+             ["Fort Aguada", "Candolim", 0, 50, "Lighthouse and sea views"],
+             ["Dudhsagar Falls jeep safari", "Mollem", 500, 1500, "Usually closed in the monsoon (Jun–Sep)"]],
+    adventure: [["Scuba diving", "Grande Island", 3000, 6000, "Boat trip with a beginner dive"],
+                ["Parasailing & water sports", "Calangute / Baga", 500, 2500, "Per activity"],
+                ["Kayaking", "Nerul / Sal backwaters", 800, 1500, "Guided, 2–3 hours"]],
+  },
+  jaipur: {
+    sights: [["Amber (Amer) Fort", "Amer", 100, 500, "₹100 Indians, ₹500 foreign nationals"],
+             ["City Palace", "Old City", 200, 1000, "Higher rate for foreign nationals"],
+             ["Hawa Mahal", "Badi Choupad", 50, 200, "₹50 Indians, ₹200 foreign nationals"]],
+    food: [["Laxmi Mishthan Bhandar (LMB)", "Johari Bazaar", 300, 700, "Rajasthani thali and sweets"],
+           ["Rawat Mishthan Bhandar", "Station Road", 50, 200, "Famous pyaaz kachori"],
+           ["Chokhi Dhani", "Tonk Road", 900, 1500, "Village-themed evening with dinner"]],
+  },
+  udaipur: {
+    sights: [["City Palace", "Lake Pichola", 300, 1000, "Museum ticket; camera extra"],
+             ["Lake Pichola boat ride", "City Palace jetty", 400, 1000, "Sunset rides cost more"],
+             ["Sajjangarh (Monsoon Palace)", "Sajjangarh hill", 100, 400, "Entry plus vehicle up the hill"]],
+    food: [["Ambrai", "Hanuman Ghat", 1000, 2500, "Lakeside dinner; book ahead"],
+           ["Upre by 1559 AD", "Lake Pichola", 1500, 3000, "Rooftop with palace views"],
+           ["Natraj Dining Hall", "Bapu Bazaar", 300, 500, "Unlimited Rajasthani thali"]],
+  },
+  kochi: {
+    sights: [["Chinese fishing nets", "Fort Kochi beach", 0, 0, "Free; best at sunset"],
+             ["Mattancherry Palace", "Mattancherry", 5, 100, "Murals; closed Fridays"],
+             ["Kathakali show", "Kerala Kathakali Centre", 300, 600, "Arrive early to watch the make-up"]],
+    food: [["Kashi Art Cafe", "Fort Kochi", 400, 800, "Breakfast and coffee"],
+           ["Dhe Puttu", "Edappally", 300, 600, "Kerala puttu varieties"],
+           ["Fort House", "Fort Kochi waterfront", 800, 1500, "Kerala seafood"]],
+  },
+  munnar: {
+    nature: [["Eravikulam National Park", "Rajamala", 200, 500, "Nilgiri tahr; closed in calving season (Feb–Mar)"],
+             ["KDHP Tea Museum", "Nallathanni", 125, 200, "Tea processing demo"],
+             ["Top Station viewpoint", "Top Station", 0, 100, "Go early, before the mist"]],
+  },
+  alleppey: {
+    nature: [["Houseboat overnight cruise", "Vembanad Lake", 4000, 10000, "Per person, sharing; includes meals"],
+             ["Shikara canal ride", "Alappuzha canals", 400, 800, "Per person per hour, sharing"],
+             ["Alappuzha Beach", "Alappuzha", 0, 0, "Free; old pier at sunset"]],
+  },
+  rishikesh: {
+    adventure: [["River rafting (Shivpuri, 16 km)", "Shivpuri", 500, 1500, "Season roughly Sep–Jun"],
+                ["Bungee jumping", "Jumpin Heights, Mohan Chatti", 3500, 5000, "Age and weight limits apply"],
+                ["Giant swing / flying fox", "Mohan Chatti", 1500, 3000, "Per activity"]],
+    sights: [["Ganga Aarti", "Triveni Ghat", 0, 0, "Free; evenings at sunset"],
+             ["Parmarth Niketan aarti", "Swarg Ashram", 0, 0, "Free; arrive 30 min early"],
+             ["Beatles Ashram (Chaurasi Kutia)", "Swarg Ashram", 150, 600, "₹150 Indians, ₹600 foreign nationals"]],
+  },
+  ooty: {
+    nature: [["Government Botanical Garden", "Ooty", 50, 100, "Camera extra"],
+             ["Ooty Lake boating", "Ooty", 200, 600, "Pedal or row boats"],
+             ["Nilgiri Mountain Railway (toy train)", "Ooty–Coonoor", 50, 600, "Book early; first class costs more"]],
+  },
+  tokyo: {
+    sights: [["Senso-ji", "Asakusa", 0, 0, "Free; go early"],
+             ["Meiji Jingu", "Harajuku", 0, 0, "Free"],
+             ["teamLab Planets", "Toyosu", 3600, 4200, "Timed tickets; book ahead"]],
+    food: [["Tsukiji Outer Market", "Tsukiji", 1500, 4000, "Street food and sushi; mornings"],
+           ["Ichiran Ramen", "Shibuya / Shinjuku", 1000, 1500, "Solo ramen booths"],
+           ["Omoide Yokocho", "Shinjuku", 2000, 4000, "Yakitori alley"]],
+    nightlife: [["Golden Gai", "Shinjuku", 1500, 4000, "Tiny bars; many charge a seat fee"],
+                ["Shibuya Center Gai bars", "Shibuya", 2000, 5000, "Drinks and izakaya"],
+                ["Roppongi clubs", "Roppongi", 2000, 4000, "Entry; ID required"]],
+  },
+  kyoto: {
+    sights: [["Fushimi Inari Taisha", "Fushimi", 0, 0, "Free; open 24 hours"],
+             ["Kinkaku-ji (Golden Pavilion)", "Kita", 500, 500, "Fixed entry"],
+             ["Kiyomizu-dera", "Higashiyama", 400, 500, "Entry"]],
+    food: [["Nishiki Market", "Downtown", 1000, 3000, "Street food tasting"],
+           ["Pontocho alley dinner", "Pontocho", 3000, 8000, "Riverside kaiseki and izakaya"],
+           ["Gion tea house sweets", "Gion", 800, 2000, "Matcha and wagashi"]],
+  },
+};
+
+function interestCategories(interests) {
+  const cats = [];
+  for (const i of interests || []) for (const [c, re] of Object.entries(KB.categories)) if (re.test(i) && !cats.includes(c)) { cats.push(c); break; }
+  return cats.length ? cats : KB.defaultCategories;
+}
+// one entry per stop × category: knowledge base first, then validated model suggestions, else an empty slot
+function placeHighlights(trip, modelPlaces = []) {
+  const cats = interestCategories(trip.interests);
+  const out = [];
+  for (const s of trip.stops) {
+    const cur = KB.currency[s.country] || trip.currency;
+    for (const category of cats) {
+      const kb = KB.places[s.city.toLowerCase()]?.[category];
+      if (kb) { out.push({ city: s.city, category, currency: cur, source: "kb", places: kb.map(([name, area, min, max, note]) => ({ name, area, min, max, note })) }); continue; }
+      const m = modelPlaces.filter((p) => p.city.toLowerCase() === s.city.toLowerCase() && p.category === category).slice(0, 3);
+      out.push({ city: s.city, category, currency: m[0]?.currency || cur, source: m.length ? "model" : "none", places: m.map(({ name, area, min, max, note }) => ({ name, area, min, max, note })) });
+    }
+  }
+  return out;
+}
+// gaps the model should fill: stop × category pairs the knowledge base doesn't cover
+const placeGaps = (trip) => placeHighlights(trip).filter((h) => h.source === "none").map(({ city, category, currency }) => ({ city, category, currency }));
+function normalizeModelPlaces(raw, gaps) {
+  const want = new Set(gaps.map((g) => `${g.city.toLowerCase()}|${g.category}`));
+  const out = [];
+  for (const p of arr(raw?.places)) {
+    const city = str(p?.city), category = str(p?.category)?.toLowerCase(), name = str(p?.name);
+    if (!city || !name || !want.has(`${city.toLowerCase()}|${category}`)) continue;
+    let min = costNum(p.min), max = costNum(p.max);
+    if (min == null && max == null) continue;
+    if (min == null) min = max; if (max == null) max = min; if (min > max) [min, max] = [max, min];
+    const gap = gaps.find((g) => g.city.toLowerCase() === city.toLowerCase());
+    out.push({ city: gap.city, category, name: name.slice(0, 80), area: str(p.area)?.slice(0, 60) || "", min, max, note: str(p.note)?.slice(0, 120) || "", currency: gap.currency });
+  }
+  return out;
+}
+// "visit everything on the shortlist" range for the whole group, per currency
+function highlightsBudget(trip, highlights) {
+  const people = trip.travelers.adults + trip.travelers.children;
+  const tot = {};
+  for (const h of highlights || []) for (const p of h.places) {
+    const t = (tot[h.currency] = tot[h.currency] || { min: 0, max: 0, count: 0 });
+    t.min += p.min * people; t.max += p.max * people; t.count++;
+  }
+  return tot;
+}
+
+/* ---------------- 1. Validate + normalize interpreter output ---------------- */
+// opts.home: the user's home country as detected by the runtime (used when the origin is unknown)
+function normalizeSpec(raw, today, opts = {}) {
+  const out = { trips: [], assumptions: [], questions: [], issues: [] };
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    out.issues.push({ sev: "fail", msg: "The interpreter did not return a JSON object." });
+    return out;
+  }
+  out.assumptions = arr(raw.assumptions).map(String).filter(Boolean).slice(0, 12);
+  out.questions = arr(raw.questions).map(String).filter(Boolean).slice(0, 8);
+  const trips = arr(raw.trips);
+  if (!trips.length) out.issues.push({ sev: "fail", msg: "No trip with a destination was found in the request." });
+  trips.forEach((t, i) => {
+    const r = normalizeTrip(t, today, i, normCountry(opts.home));
+    if (r.error) out.issues.push({ sev: "fail", msg: r.error });
+    else out.trips.push(r);
+  });
+  // cross-trip overlap
+  const sorted = [...out.trips].sort((a, b) => (a.startDate < b.startDate ? -1 : 1));
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i].startDate < sorted[i - 1].endDate)
+      out.issues.push({ sev: "warn", msg: `“${sorted[i - 1].title}” and “${sorted[i].title}” overlap (${D.fmt(sorted[i].startDate)} is before ${D.fmt(sorted[i - 1].endDate)}).` });
+  }
+  return out;
+}
+
+function normalizeTrip(t, today, i, home) {
+  if (!t || typeof t !== "object") return { error: `Trip ${i + 1} is not an object.` };
+  const issues = [], fixes = [], assumed = [];
+  const stopsRaw = [];
+  for (const s of arr(t.stops).filter((s) => s && str(s.city))) {
+    const prev = stopsRaw[stopsRaw.length - 1];
+    // back-to-back stops in the same city are one stay (models sometimes split them)
+    if (prev && str(prev.city).toLowerCase() === str(s.city).toLowerCase()) {
+      const a = toInt(prev.nights), b = toInt(s.nights);
+      stopsRaw[stopsRaw.length - 1] = { ...prev, nights: a > 0 && b > 0 ? a + b : null, endDate: s.endDate ?? null };
+      fixes.push(`Merged back-to-back ${titleCase(str(s.city))} stops into one stay.`);
+    } else stopsRaw.push(s);
+  }
+  if (!stopsRaw.length) return { error: `Trip ${i + 1} has no destination city.` };
+
+  const guessC = (city, given) => normCountry(given) || (city ? KB.cityCountry[city.toLowerCase()] || null : null);
+  const origin = { city: str(t.origin?.city) ? titleCase(str(t.origin.city)) : null, country: null };
+  origin.country = guessC(origin.city, t.origin?.country);
+  if (!origin.city) assumed.push("Starting city not stated; outbound/return legs use “home”.");
+
+  const adultsIn = toInt(t.travelers?.adults);
+  const adults = Math.max(1, adultsIn ?? 1);
+  if (adultsIn == null) assumed.push("1 adult traveller (not stated).");
+  const children = Math.max(0, toInt(t.travelers?.children) ?? 0);
+
+  // start date
+  let start = D.parse(t.startDate) != null ? t.startDate : D.parse(stopsRaw[0].startDate) != null ? stopsRaw[0].startDate : null;
+  if (!start) { start = D.add(today, 30); assumed.push(`Start date not given; assumed ${D.fmtY(start)} (30 days out).`); }
+  let statedEnd = D.parse(t.endDate) != null ? t.endDate : D.parse(stopsRaw[stopsRaw.length - 1].endDate) != null ? stopsRaw[stopsRaw.length - 1].endDate : null;
+  if (statedEnd && D.diff(start, statedEnd) < 1) { issues.push({ sev: "warn", msg: `End date ${D.fmtY(statedEnd)} is not after start ${D.fmtY(start)}; ignored it.` }); statedEnd = null; }
+
+  // nights per stop
+  const nights = stopsRaw.map((s) => {
+    const a = D.parse(s.startDate), b = D.parse(s.endDate);
+    if (a != null && b != null && b > a) return Math.round((b - a) / 864e5);
+    const n = toInt(s.nights);
+    return n && n > 0 ? n : null;
+  });
+  const known = nights.filter((n) => n != null).reduce((a, b) => a + b, 0);
+  const unknown = nights.map((n, j) => (n == null ? j : -1)).filter((j) => j >= 0);
+  if (unknown.length) {
+    const names = unknown.map((j) => titleCase(str(stopsRaw[j].city))).join(", ");
+    if (statedEnd) {
+      let rem = D.diff(start, statedEnd) - known;
+      if (rem < unknown.length) { issues.push({ sev: "warn", msg: `Stated dates leave too few nights for ${names}; gave each 1 night.` }); rem = unknown.length; }
+      const base = Math.floor(rem / unknown.length), extra = rem % unknown.length;
+      unknown.forEach((j, k) => (nights[j] = base + (k < extra ? 1 : 0)));
+      fixes.push(`Split the remaining ${rem} night(s) across ${names}.`);
+    } else {
+      unknown.forEach((j) => (nights[j] = 2));
+      assumed.push(`Length of stay not given for ${names}; assumed 2 nights each.`);
+    }
+  }
+  if (nights.some((n) => n > 30)) issues.push({ sev: "warn", msg: "A single stop longer than 30 nights; check the duration." });
+
+  // chain stops back-to-back (departure day = next arrival day)
+  let cur = start;
+  const stops = stopsRaw.map((s, j) => {
+    const city = titleCase(str(s.city));
+    if (D.parse(s.startDate) != null && s.startDate !== cur) fixes.push(`${city}: arrival moved ${D.fmt(s.startDate)} → ${D.fmt(cur)} so stops run back-to-back without gaps or overlaps.`);
+    const st = { city, country: guessC(city, s.country), nights: nights[j], arriveBy: normMode(s.arriveBy), startDate: cur, endDate: D.add(cur, nights[j]) };
+    cur = st.endDate;
+    return st;
+  });
+  const end = cur;
+  if (statedEnd && statedEnd !== end) issues.push({ sev: "warn", msg: `Stated end ${D.fmt(statedEnd)} differs from the sum of stop lengths (${D.fmt(end)}); used the stop lengths.` });
+  if (start < today) issues.push({ sev: "fail", msg: `Trip starts ${D.fmtY(start)}, which is already in the past.` });
+  else if (D.diff(today, start) > 540) issues.push({ sev: "warn", msg: `Trip starts ${D.fmtY(start)}, more than 18 months away; prices and schedules are speculative.` });
+
+  // origin country unknown: fall back to the home country the runtime detected
+  if (!origin.country && home) {
+    origin.country = home;
+    assumed.push(origin.city
+      ? `Couldn't place ${origin.city}; assumed it is in ${titleCase(home)} (detected from this device).`
+      : `Assumed you start from ${titleCase(home)} (detected from this device).`);
+  }
+
+  // international?
+  const cs = [origin.country, ...stops.map((s) => s.country)];
+  const knownCs = cs.filter(Boolean);
+  let international;
+  if (new Set(knownCs).size > 1) international = true;
+  else if (knownCs.length === cs.length) international = false;
+  else international = null;
+  if (international === null) assumed.push("Could not confirm whether the trip crosses a border; border tasks are marked conditional.");
+
+  // budget
+  const amount = Number(t.budget?.amount);
+  let currency = str(t.budget?.currency)?.toUpperCase() || null;
+  if (currency && !/^[A-Z]{3}$/.test(currency)) currency = null;
+  if (!currency) {
+    currency = KB.currency[origin.country] || KB.currency[stops[0].country] || "INR";
+    if (amount > 0) assumed.push(`Budget currency not stated; assumed ${currency}.`);
+  }
+  const budget = amount > 0 ? { amount, currency, scope: t.budget?.scope === "per_person" ? "per_person" : "total" } : null;
+
+  const pace = ["relaxed", "moderate", "packed"].includes(t.pace) ? t.pace : "moderate";
+  const title = str(t.title) || [origin.city, ...stops.map((s) => s.city)].filter(Boolean).join(" → ");
+
+  return {
+    title, origin, stops, startDate: start, endDate: end, nights: D.diff(start, end),
+    travelers: { adults, children }, budget, currency, pace,
+    interests: arr(t.interests).map(String).filter(Boolean).slice(0, 10),
+    constraints: arr(t.constraints).map(String).filter(Boolean).slice(0, 10),
+    accommodation: str(t.accommodation),
+    returnBy: normMode(t.returnBy),
+    international, issues, fixes, assumed,
+  };
+}
+
+/* ---------------- 2. Day skeleton (symbolic frame for the LLM) ---------------- */
+function daySkeleton(trip) {
+  const days = [], home = trip.origin.city || "home";
+  for (let d = trip.startDate; d <= trip.endDate; d = D.add(d, 1)) {
+    let travel = null;
+    if (d === trip.startDate) travel = { from: home, to: trip.stops[0].city, mode: trip.stops[0].arriveBy };
+    const leaving = trip.stops.findIndex((s) => s.endDate === d);
+    if (leaving >= 0) {
+      const nx = trip.stops[leaving + 1];
+      travel = nx ? { from: trip.stops[leaving].city, to: nx.city, mode: nx.arriveBy } : { from: trip.stops[leaving].city, to: home, mode: trip.returnBy };
+    }
+    const idx = trip.stops.findIndex((s) => d >= s.startDate && d < s.endDate);
+    days.push({ date: d, city: idx >= 0 ? trip.stops[idx].city : trip.stops[trip.stops.length - 1].city, travel });
+  }
+  return days;
+}
+
+/* ---------------- 3. Rule instantiation -> task graph ---------------- */
+function buildTasks(trip) {
+  const T = [], L = KB.lead;
+  const intl = trip.international; // true | false | null
+  const cond = intl === null ? " (if crossing a border)" : "";
+  const add = (id, title, lead, deps, rule, cat, effort = 1) => T.push({ id, title, lead, deps, rule, cat, effort, cond: intl === null && ["R2", "R3", "R6", "R7"].includes(rule) });
+  const home = { city: trip.origin.city || "home", country: trip.origin.country };
+
+  add("scope", "Confirm dates, travellers and budget", intl === false ? L.scopeDom : L.scope, [], "R1", "plan");
+  const countries = [...new Set(trip.stops.map((s) => s.country).filter((c) => c && c !== trip.origin.country))].map(titleCase);
+  if (intl !== false) {
+    add("passport", `Check passport validity (6+ months past ${D.fmtY(trip.endDate)})${cond}`, L.passport, ["scope"], "R2", "docs");
+    add("entry", `Check visa and entry rules for ${countries.join(", ") || "destination"}${cond}`, L.entry, ["passport"], "R3", "docs");
+  }
+  const pre = intl !== false ? ["entry"] : ["scope"];
+
+  const nodes = [home, ...trip.stops, home];
+  const legIds = [];
+  for (let i = 0; i < nodes.length - 1; i++) {
+    const a = nodes[i], b = nodes[i + 1];
+    const id = i === 0 ? "legOut" : i === nodes.length - 2 ? "legRet" : `leg${i}`;
+    const date = i === 0 ? trip.startDate : trip.stops[i - 1].endDate;
+    const mode = i === nodes.length - 2 ? trip.returnBy : trip.stops[i].arriveBy;
+    const legIntl = a.country && b.country ? a.country !== b.country : intl === true;
+    add(id, `Book ${mode || "transport"}: ${a.city} → ${b.city} (${D.fmt(date)})`, legIntl ? L.legIntl : L.legDom, pre, "R4", "book");
+    legIds.push(id);
+  }
+  const stayIds = trip.stops.map((s, i) => {
+    const id = `stay${i + 1}`;
+    add(id, `Book stay in ${s.city}: ${s.nights} night${s.nights > 1 ? "s" : ""} from ${D.fmt(s.startDate)}`, intl === false ? L.stayDom : L.stay, [legIds[i]], "R5", "book");
+    return id;
+  });
+  const bookings = [...legIds, ...stayIds];
+  if (intl !== false) add("visa", `Apply for visa if required${cond}`, L.visa, ["entry", ...bookings], "R6", "docs", KB.effort.visa);
+  if (intl !== false) add("insurance", "Buy travel insurance", L.insurance, ["legOut"], "R7", "docs");
+  const destCur = [...new Set(trip.stops.map((s) => KB.currency[s.country]).filter(Boolean))];
+  const homeCur = KB.currency[trip.origin.country];
+  if (homeCur && destCur.some((c) => c !== homeCur)) add("forex", `Arrange forex / travel card (${destCur.filter((c) => c !== homeCur).join(", ")})`, L.forex, ["scope"], "R8", "money");
+  add("activities", "Pre-book timed-entry attractions", L.activities, stayIds, "R9", "book");
+  const docDeps = [...bookings, "activities", ...(intl !== false ? ["visa", "insurance"] : [])];
+  add("docs", "Download tickets, confirmations and offline maps", L.docs, docDeps, "R10", "docs");
+  add("pack", "Pack using the day plan and weather", L.pack, ["docs", ...(T.some((t) => t.id === "forex") ? ["forex"] : [])], "R11", "plan");
+  return T;
+}
+
+/* ---------------- 4. Topological sort + backward deadline pass ---------------- */
+function schedule(tasks, tripStart, today) {
+  const byId = Object.fromEntries(tasks.map((t) => [t.id, t]));
+  const badRefs = [];
+  tasks.forEach((t) => t.deps.forEach((d) => { if (!byId[d]) badRefs.push(`${t.id} → ${d}`); }));
+  const dependents = Object.fromEntries(tasks.map((t) => [t.id, []]));
+  const indeg = Object.fromEntries(tasks.map((t) => [t.id, 0]));
+  tasks.forEach((t) => t.deps.forEach((d) => { if (byId[d]) { dependents[d].push(t.id); indeg[t.id]++; } }));
+  const q = tasks.filter((t) => indeg[t.id] === 0).map((t) => t.id);
+  const order = [];
+  while (q.length) {
+    const id = q.shift(); order.push(id);
+    for (const n of dependents[id]) if (--indeg[n] === 0) q.push(n);
+  }
+  if (order.length < tasks.length) {
+    return { ok: false, cycle: tasks.filter((t) => !order.includes(t.id)).map((t) => t.id), badRefs, tasks };
+  }
+  const out = tasks.map((t) => ({ ...t, due: D.add(tripStart, -t.lead), tightenedBy: null }));
+  const m = Object.fromEntries(out.map((t) => [t.id, t]));
+  for (const id of [...order].reverse()) {
+    const t = m[id];
+    for (const b of dependents[id]) {
+      const lim = D.add(m[b].due, -m[b].effort); // finish before b must start
+      if (lim < t.due) { t.due = lim; t.tightenedBy = b; }
+    }
+  }
+  const depth = {};
+  for (const id of order) depth[id] = Math.max(0, ...m[id].deps.filter((d) => m[d]).map((d) => depth[d] + 1));
+  out.forEach((t) => {
+    t.startBy = D.add(t.due, -(t.effort - 1));
+    t.depth = depth[t.id];
+    // infeasible: even starting today it cannot finish before departure; late: past the recommended lead time
+    t.status = D.add(today, t.effort - 1) >= tripStart ? "infeasible" : t.due < today ? "late" : t.startBy <= D.add(today, 2) ? "urgent" : "ok";
+    t.slack = D.diff(today, t.startBy);
+  });
+  // sanity: every edge respects ordering
+  const edgeViol = [];
+  out.forEach((t) => t.deps.forEach((d) => { if (m[d] && m[d].due > D.add(t.startBy, -1)) edgeViol.push(`${d} → ${t.id}`); }));
+  return { ok: true, order, badRefs, edgeViol, tasks: out.sort((a, b) => (a.startBy < b.startBy ? -1 : a.startBy > b.startBy ? 1 : a.depth - b.depth)) };
+}
+
+/* ---------------- 5. Itinerary verification ---------------- */
+const tm = (s) => { if (typeof s !== "string") return null; const m = /^(\d{1,2}):(\d{2})$/.exec(s.trim()); if (!m) return null; const h = +m[1], mi = +m[2]; if (h > 23 || mi > 59) return null; return h * 60 + mi; };
+const ITEM_TYPES = ["transit", "sight", "food", "activity", "rest", "checkin"];
+
+function verifyItinerary(trip, itin, skel) {
+  const v = [];
+  if (!itin || typeof itin !== "object" || !Array.isArray(itin.days)) return [{ code: "coverage", sev: "fail", msg: "Itinerary has no “days” array." }];
+  const map = new Map();
+  itin.days.forEach((d, k) => {
+    if (!d || D.parse(d.date) == null) v.push({ code: "coverage", sev: "fail", msg: `Day #${k + 1} has an invalid date “${d?.date}”.` });
+    else if (map.has(d.date)) v.push({ code: "coverage", sev: "fail", msg: `${d.date} appears twice.` });
+    else map.set(d.date, d);
+  });
+  const skelSet = new Set(skel.map((s) => s.date));
+  for (const d of map.keys()) if (!skelSet.has(d)) v.push({ code: "coverage", sev: "fail", msg: `${d} is outside the trip (${trip.startDate} to ${trip.endDate}).` });
+  const cap = KB.paceCap[trip.pace] * 60;
+  for (const s of skel) {
+    const day = map.get(s.date);
+    if (!day) { v.push({ code: "coverage", sev: "fail", msg: `No plan for ${s.date} (${s.city}).` }); continue; }
+    const items = arr(day.items);
+    if (!items.length) v.push({ code: "coverage", sev: "warn", msg: `${s.date} has no activities.` });
+    const parsed = [];
+    items.forEach((it) => {
+      const a = tm(it?.start), b = tm(it?.end);
+      if (a == null || b == null) v.push({ code: "time", sev: "fail", msg: `${s.date}: “${it?.title}” has an invalid time (${it?.start}–${it?.end}).` });
+      else if (b <= a) v.push({ code: "time", sev: "fail", msg: `${s.date}: “${it.title}” ends before it starts (${it.start}–${it.end}).` });
+      else parsed.push({ a, b, it });
+      if (it && it.cost != null && !(Number(it.cost) >= 0)) v.push({ code: "cost", sev: "warn", msg: `${s.date}: “${it.title}” has an invalid cost.` });
+    });
+    parsed.sort((x, y) => x.a - y.a);
+    for (let i = 1; i < parsed.length; i++)
+      if (parsed[i].a < parsed[i - 1].b) v.push({ code: "overlap", sev: "fail", msg: `${s.date}: “${parsed[i - 1].it.title}” (${parsed[i - 1].it.start}–${parsed[i - 1].it.end}) overlaps “${parsed[i].it.title}” (${parsed[i].it.start}–${parsed[i].it.end}).` });
+    const load = parsed.filter((p) => p.it.type !== "transit" && p.it.type !== "rest").reduce((s2, p) => s2 + (p.b - p.a), 0);
+    if (load > cap) v.push({ code: "load", sev: "fail", msg: `${s.date}: ${(load / 60).toFixed(1)} h of activities exceeds the ${trip.pace} limit of ${cap / 60} h.` });
+    if (s.travel && !parsed.some((p) => p.it.type === "transit")) v.push({ code: "transit", sev: "fail", msg: `${s.date} is a travel day (${s.travel.from} → ${s.travel.to}) but has no transit item.` });
+  }
+  const c = itin.costs;
+  if (!c || typeof c !== "object") v.push({ code: "cost", sev: "warn", msg: "No cost breakdown returned." });
+  else for (const [k, val] of Object.entries(c)) if (!(Number(val) >= 0)) v.push({ code: "cost", sev: "warn", msg: `Cost “${k}” is not a valid amount.` });
+  return v;
+}
+
+function autoFixItinerary(trip, itin, skel) {
+  const fixes = [];
+  const src = new Map(arr(itin?.days).filter((d) => d && D.parse(d.date) != null).map((d) => [d.date, d]));
+  const cap = KB.paceCap[trip.pace] * 60;
+  const pad = (n) => `${String(Math.floor(n / 60)).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}`;
+  const days = skel.map((s) => {
+    const day = src.get(s.date);
+    if (!day) fixes.push(`Added an open day for ${s.date} (${s.city}).`);
+    let items = arr(day?.items).map((it) => ({ ...it, a: tm(it?.start), b: tm(it?.end) }))
+      .filter((it) => { const ok = it.a != null && it.b != null && it.b > it.a; if (!ok && it) fixes.push(`${s.date}: dropped “${it.title}” (invalid time).`); return ok; })
+      .sort((x, y) => x.a - y.a);
+    const kept = [];
+    for (const it of items) {
+      const prev = kept[kept.length - 1];
+      if (prev && it.a < prev.b) {
+        const len = it.b - it.a, na = prev.b, nb = prev.b + len;
+        if (nb <= 23 * 60 + 30) { fixes.push(`${s.date}: moved “${it.title}” to ${pad(na)} to clear an overlap.`); it.a = na; it.b = nb; }
+        else { fixes.push(`${s.date}: dropped “${it.title}” (no room after overlap).`); continue; }
+      }
+      kept.push(it);
+    }
+    let load = kept.filter((p) => p.type !== "transit" && p.type !== "rest").reduce((t, p) => t + (p.b - p.a), 0);
+    while (load > cap) {
+      const idx = [...kept].reverse().findIndex((p) => p.type === "sight" || p.type === "activity");
+      if (idx < 0) break;
+      const real = kept.length - 1 - idx, rm = kept.splice(real, 1)[0];
+      load -= rm.b - rm.a;
+      fixes.push(`${s.date}: removed “${rm.title}” to respect the ${trip.pace} pace.`);
+    }
+    if (s.travel && !kept.some((p) => p.type === "transit")) {
+      const first = kept.length ? kept[0].a : 12 * 60;
+      const b = Math.max(60, Math.min(first, 12 * 60)), a = Math.max(0, b - 180);
+      kept.unshift({ a, b, title: `Travel ${s.travel.from} → ${s.travel.to}`, type: "transit", place: "", cost: null, auto: true });
+      fixes.push(`${s.date}: inserted a transit block (${s.travel.from} → ${s.travel.to}); set exact times when booked.`);
+    }
+    return { date: s.date, items: kept.map(({ a, b, ...it }) => ({ ...it, start: pad(a), end: pad(b), type: ITEM_TYPES.includes(it.type) ? it.type : "activity" })) };
+  });
+  const costs = {};
+  if (itin?.costs && typeof itin.costs === "object") for (const [k, val] of Object.entries(itin.costs)) { const n = costNum(val); if (n != null) costs[k] = n; }
+  return { itin: { days, costs: Object.values(costs).some((v) => v > 0) ? costs : null, tips: arr(itin?.tips).map(String).slice(0, 8) }, fixes };
+}
+
+// models often send "₹6,000" or {amount: 6000} instead of a plain number
+function costNum(v) {
+  if (v && typeof v === "object") v = v.amount ?? v.total ?? v.value;
+  if (typeof v === "string") v = v.replace(/,/g, "").match(/\d+(\.\d+)?/)?.[0];
+  if (v == null || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+function budgetCheck(trip, itin) {
+  const c = itin?.costs;
+  if (!c) return { sev: "warn", msg: "No cost estimate available, so the budget could not be checked.", total: null };
+  const total = Object.values(c).reduce((a, b) => a + Number(b || 0), 0);
+  if (!trip.budget) return { sev: "warn", msg: `No budget set. Estimated total ${money(total, trip.currency)}.`, total };
+  const people = trip.travelers.adults + trip.travelers.children;
+  const cap = trip.budget.scope === "per_person" ? trip.budget.amount * people : trip.budget.amount;
+  if (total <= cap) return { sev: "pass", msg: `Estimated ${money(total, trip.currency)} of ${money(cap, trip.currency)} (${Math.round((total / cap) * 100)}%).`, total, cap };
+  return { sev: "warn", msg: `Estimated ${money(total, trip.currency)} is ${Math.round(((total - cap) / cap) * 100)}% over the ${money(cap, trip.currency)} budget.`, total, cap };
+}
+
+function money(n, cur) {
+  if (n == null || !Number.isFinite(Number(n))) return "—";
+  try { return new Intl.NumberFormat(cur === "INR" ? "en-IN" : "en", { style: "currency", currency: cur || "INR", maximumFractionDigits: 0 }).format(n); }
+  catch { return `${cur || ""} ${Math.round(n).toLocaleString()}`; }
+}
+
+/* ---------------- 6. Verdict table ---------------- */
+function worst(list) { return list.includes("fail") ? "fail" : list.includes("warn") ? "warn" : "pass"; }
+function tripChecks(trip, sched, finalViol, budget, today) {
+  const C = [];
+  const byCode = (code) => finalViol.filter((x) => x.code === code);
+  const push = (id, label, layer, items, passMsg) => {
+    const sev = items.length ? worst(items.map((x) => x.sev)) : "pass";
+    C.push({ id, label, layer, sev, detail: items.length ? items.map((x) => x.msg) : [passMsg] });
+  };
+  push("parse", "Request understood", "neural", trip.assumed.map((m) => ({ sev: "warn", msg: `Assumed: ${m}` })), "All required fields came from your request.");
+  push("dates", "Dates resolve and are in the future", "symbolic", trip.issues, `${D.fmtY(trip.startDate)} → ${D.fmtY(trip.endDate)}, ${trip.nights} night(s).`);
+  push("seq", "Stops run back-to-back", "symbolic", trip.fixes.map((m) => ({ sev: "warn", msg: `Corrected: ${m}` })), `${trip.stops.length} stop(s), no gaps or overlaps.`);
+  push("dag", "Task graph is acyclic and ordered", "symbolic", sched.ok ? (sched.edgeViol || []).map((e) => ({ sev: "fail", msg: `Deadline order broken on edge ${e}` })) : [{ sev: "fail", msg: `Cycle among: ${sched.cycle.join(", ")}` }], `${sched.tasks.length} tasks; every prerequisite is due before its dependent starts.`);
+  push("refs", "Every dependency exists", "symbolic", sched.badRefs.map((r) => ({ sev: "fail", msg: `Missing dependency ${r}` })), "All edges resolve.");
+  if (sched.ok) {
+    const inf = sched.tasks.filter((t) => t.status === "infeasible").map((t) => ({ sev: t.cond ? "warn" : "fail", msg: `“${t.title}” takes ~${t.effort} day(s) and cannot finish before departure on ${D.fmtY(trip.startDate)}.` }));
+    const late = sched.tasks.filter((t) => t.status === "late").map((t) => ({ sev: "warn", msg: `“${t.title}” is behind the recommended lead time (ideally done by ${D.fmtY(t.due)}${t.tightenedBy ? `, set by ${t.tightenedBy}` : ""}); do it now.` }));
+    const urgent = sched.tasks.filter((t) => t.status === "urgent").map((t) => ({ sev: "warn", msg: `“${t.title}” should start by ${D.fmtY(t.startBy)}.` }));
+    push("deadlines", "Deadlines reachable from today", "symbolic", [...inf, ...late, ...urgent], `Earliest task starts ${D.fmtY(sched.tasks[0]?.startBy)}; nothing is late.`);
+  }
+  push("coverage", "Itinerary covers every day", "symbolic", byCode("coverage"), `${trip.nights + 1} day(s) planned.`);
+  push("time", "No time conflicts", "symbolic", [...byCode("time"), ...byCode("overlap")], "All items have valid, non-overlapping times.");
+  push("load", "Daily load fits the pace", "symbolic", byCode("load"), `≤ ${KB.paceCap[trip.pace]} active hours/day (${trip.pace}).`);
+  push("transit", "Travel days include transit", "symbolic", byCode("transit"), "Every city change has a transit block.");
+  C.push({ id: "budget", label: "Budget", layer: "symbolic", sev: budget.sev, detail: [budget.msg, ...byCode("cost").map((x) => x.msg)] });
+  return C;
+}
+
+/* ---------------- 7. Offline fallback: rule parser + template ---------------- */
+const MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+function ruleParse(text, today) {
+  const parts = text.split(/\n+|;|\balso\b|\bseparately\b/i).map((s) => s.replace(/^[\s,.:-]+/, "").trim())
+    .filter((s) => /\bto\b|\bvisit/i.test(s) || /\d+\s*(nights?|days?)/i.test(s));
+  const trips = (parts.length ? parts : [text]).map((p) => parseOne(p, today)).filter(Boolean);
+  return { trips, assumptions: ["Parsed by the offline rule engine (no language model connected); review the fields."], questions: [] };
+}
+function parseOne(s, today) {
+  const origin = /\bfrom\s+([A-Za-z][A-Za-z .'-]+?)(?=\s+(?:to|on|in|for|with|and)\b|[,.:]|$)/i.exec(s)?.[1]
+    || /(?:^|[:,]\s*)([A-Z][a-zA-Z]+(?:\s[A-Z][a-zA-Z]+)?)\s+to\s+[A-Z]/.exec(s.replace(/^(?:two|three|\d+)\s+trips?\s*:?\s*/i, ""))?.[1];
+  const destM = /\b(?:to|visit(?:ing)?)\s+([A-Za-z][A-Za-z ,.'-]+?)(?=\s+(?:for|on|from|in|with|under|budget|starting|next|this|around)\b|\s+\d|[.;]|$)/i.exec(s)
+    || /^(?:a\s+trip\s+to\s+|trip\s+to\s+)?([A-Z][a-zA-Z]+(?:\s[A-Z][a-zA-Z]+)?)\b/.exec(s.replace(/^(?:two|three|\d+)\s+trips?\s*:?\s*/i, ""));
+  if (!destM) return null;
+  const cities = destM[1].split(/,|\band\b|\bthen\b/i).map((c) => c.trim()).filter((c) => c && c.length < 40);
+  const dur = /(\d+)\s*(nights?|days?)/i.exec(s);
+  let totalNights = dur ? (/night/i.test(dur[2]) ? +dur[1] : Math.max(1, +dur[1] - 1)) : null;
+  let startDate = null;
+  const ty = +today.slice(0, 4);
+  const m1 = /(\d{1,2})(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?(?:,?\s+(\d{4}))?/i.exec(s)
+          || (() => { const m = /(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?/i.exec(s); return m ? [m[0], m[2], m[1], m[3]] : null; })();
+  const rel = /\b(next|this)\s+(week|weekend|month)\b|\b(tomorrow|day after tomorrow)\b/i.exec(s);
+  if (!m1 && rel) {
+    const t0 = new Date(D.parse(today)), dow = t0.getUTCDay();
+    if (/day after/i.test(rel[0])) startDate = D.add(today, 2);
+    else if (/tomorrow/i.test(rel[0])) startDate = D.add(today, 1);
+    else if (/weekend/i.test(rel[2] || "")) startDate = D.add(today, ((5 - dow + 7) % 7 || 7) + (/next/i.test(rel[1]) ? 7 : 0)); // Friday
+    else if (/week/i.test(rel[2] || "")) startDate = D.add(today, ((1 - dow + 7) % 7 || 7)); // next Monday
+    else if (/month/i.test(rel[2] || "")) { const y = t0.getUTCFullYear(), mo = t0.getUTCMonth() + (/next/i.test(rel[1]) ? 1 : 0); startDate = D.iso(Date.UTC(y, mo, /next/i.test(rel[1]) ? 1 : t0.getUTCDate() + 7)); }
+  }
+  if (!totalNights && /long weekend/i.test(s)) totalNights = 3;
+  else if (!totalNights && /\bweekend\b/i.test(s)) totalNights = 2;
+  if (!totalNights && /\ba week\b/i.test(s)) totalNights = 7;
+  if (m1) {
+    const mon = MONTHS[m1[2].slice(0, 3).toLowerCase()], day = +m1[1];
+    let y = m1[3] ? +m1[3] : ty;
+    let iso = `${y}-${String(mon + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    if (!m1[3] && D.parse(iso) != null && iso < today) iso = `${y + 1}${iso.slice(4)}`;
+    if (D.parse(iso) != null) startDate = iso;
+  } else {
+    const iso = /(\d{4}-\d{2}-\d{2})/.exec(s)?.[1];
+    const mo = /\b(mid|early|late|end of)?[\s-]*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b(?:\s+(\d{4}))?/i.exec(s);
+    if (D.parse(iso) != null) startDate = iso;
+    else if (mo) {
+      const mon = MONTHS[mo[2].slice(0, 3).toLowerCase()];
+      const day = /mid/i.test(mo[1] || "") ? 15 : /late|end/i.test(mo[1] || "") ? 22 : 1;
+      let y = mo[3] ? +mo[3] : ty;
+      let cand = `${y}-${String(mon + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      if (!mo[3] && cand < today) cand = `${y + 1}${cand.slice(4)}`;
+      if (D.parse(cand) != null) startDate = cand;
+    }
+  }
+  const b = /(₹|rs\.?|inr|\$|usd|€|eur|£|gbp)\s*([\d,.]+)\s*(k|lakhs?|l\b)?/i.exec(s) || (() => { const m = /([\d,.]+)\s*(k|lakhs?)?\s*(inr|rupees|usd|dollars|eur|euros|gbp)/i.exec(s); return m ? [m[0], m[3], m[1], m[2]] : null; })();
+  let budget = null;
+  if (b) {
+    let amt = parseFloat(b[2].replace(/,/g, ""));
+    if (/^k/i.test(b[3] || "")) amt *= 1e3; if (/^l/i.test(b[3] || "")) amt *= 1e5;
+    const sym = b[1].toLowerCase();
+    const cur = /₹|rs|inr|rupee/.test(sym) ? "INR" : /\$|usd|dollar/.test(sym) ? "USD" : /€|eur/.test(sym) ? "EUR" : "GBP";
+    budget = { amount: amt, currency: cur, scope: /per\s*(person|head)|each/i.test(s) ? "per_person" : "total" };
+  }
+  const ppl = /(\d+)\s*(?:people|adults|persons|of us|friends|pax)/i.exec(s);
+  const kids = /(\d+)\s*(?:kids|children|child)/i.exec(s);
+  const interestWords = ["beach", "food", "history", "museum", "nature", "hiking", "trek", "temple", "nightlife", "party", "club", "pub", "shopping", "art", "wildlife", "tea", "backwater", "photography", "architecture", "adventure", "rafting", "scuba", "diving", "heritage", "culture", "sightseeing"];
+  const interests = interestWords.filter((w) => new RegExp(`\\b${w}`, "i").test(s));
+  const per = totalNights ? Math.max(1, Math.floor(totalNights / cities.length)) : null;
+  return {
+    title: null,
+    origin: { city: origin || null, country: null },
+    stops: cities.map((c, i) => ({ city: c, country: null, nights: per ? (i === cities.length - 1 ? Math.max(1, totalNights - per * (cities.length - 1)) : per) : null, arriveBy: null })),
+    startDate, endDate: null,
+    travelers: { adults: ppl ? +ppl[1] : null, children: kids ? +kids[1] : 0 },
+    budget, interests,
+    pace: /relax|slow|chill/i.test(s) ? "relaxed" : /pack|fast|max/i.test(s) ? "packed" : "moderate",
+    returnBy: null, constraints: [],
+  };
+}
+
+function templateItinerary(trip, skel, highlights = []) {
+  const people = trip.travelers.adults + trip.travelers.children;
+  // per city: queues of shortlisted places by slot; each place is used once, in shortlist order
+  const q = {};
+  for (const h of highlights) {
+    const c = (q[h.city.toLowerCase()] = q[h.city.toLowerCase()] || { day: [], food: [], night: [] });
+    const slot = h.category === "food" ? "food" : h.category === "nightlife" ? "night" : "day";
+    c[slot].push(...h.places.map((p) => ({ ...p, cost: h.currency === trip.currency ? Math.round(((p.min + p.max) / 2) * people) : null })));
+  }
+  const take = (city, slot) => q[city.toLowerCase()]?.[slot].shift();
+  const item = (start, end, p, fallback, type) => p
+    ? { start, end, title: p.name, type, place: p.area, cost: p.cost }
+    : { start, end, title: fallback, type, place: "", cost: null };
+  const days = skel.map((s) => {
+    const items = [];
+    const topic = (k) => trip.interests[k % Math.max(1, trip.interests.length)] || "main sights";
+    if (s.travel) {
+      items.push({ start: "08:00", end: "12:00", title: `Travel ${s.travel.from} → ${s.travel.to}`, type: "transit", place: "", cost: null });
+      if (s.travel.to !== (trip.origin.city || "home")) {
+        items.push({ start: "13:00", end: "14:00", title: `Check in, ${s.travel.to}`, type: "checkin", place: "", cost: null });
+        items.push(item("17:00", "19:00", take(s.travel.to, "day"), `Walk around ${s.travel.to}`, "sight"));
+      }
+    } else {
+      const night = take(s.city, "night");
+      items.push(item("09:00", "12:00", take(s.city, "day"), `${s.city}: ${topic(0)}`, "sight"));
+      items.push(item("12:30", "13:30", take(s.city, "food"), "Lunch", "food"));
+      // a night out replaces the afternoon block so the day stays inside the pace cap
+      if (!night) items.push(item("15:00", { relaxed: "17:00", moderate: "17:30", packed: "18:00" }[trip.pace] || "17:30", take(s.city, "day"), `${s.city}: ${topic(1)}`, "activity"));
+      items.push(item("19:30", "20:30", take(s.city, "food"), "Dinner", "food"));
+      if (night) items.push(item("21:30", "23:30", night, "Night out", "activity"));
+    }
+    return { date: s.date, items };
+  });
+  return { days, costs: null, tips: [highlights.some((h) => h.places.length)
+    ? "Offline template: shortlisted places are scheduled with approximate costs; connect a language model for transport and stay estimates."
+    : "Offline template: connect a language model for real places and cost estimates."] };
+}
+
+/* ---------------- 8. Prompts (neural layer contracts) ---------------- */
+function interpretPrompt(text, today, base) {
+  return `You are the INTERPRETATION layer of a neuro-symbolic travel planner. A deterministic engine will validate your JSON, so follow the schema exactly and output JSON only.
+
+Today is ${D.dow(today)} ${today}. Resolve relative dates ("next Friday", "this Diwali", "in December") to ISO YYYY-MM-DD. A month without a year means its next future occurrence. If no date is implied, use null — never invent one.
+
+If the text describes SEVERAL SEPARATE trips, return one entry per trip. A multi-city journey is ONE trip with several ordered stops.
+
+Schema:
+{"trips":[{
+  "title": string|null,
+  "origin": {"city": string|null, "country": string|null},
+  "stops": [{"city": string, "country": string, "nights": integer|null, "startDate": "YYYY-MM-DD"|null, "endDate": "YYYY-MM-DD"|null, "arriveBy": "flight"|"train"|"bus"|"car"|"ferry"|null}],
+  "startDate": "YYYY-MM-DD"|null, "endDate": "YYYY-MM-DD"|null,
+  "returnBy": "flight"|"train"|"bus"|"car"|"ferry"|null,
+  "travelers": {"adults": integer|null, "children": integer},
+  "budget": {"amount": number|null, "currency": "ISO 4217 code"|null, "scope": "total"|"per_person"},
+  "interests": [string], "pace": "relaxed"|"moderate"|"packed",
+  "accommodation": string|null, "constraints": [string]
+}],
+"assumptions": [string], "questions": [string]}
+
+Rules:
+- country: full English country name for every city you can identify (e.g. "India", "Japan").
+- nights: "5 days" means 4 nights; "a week" means 7 nights. If a total is given for a multi-city trip without a split, split it sensibly and list that in assumptions.
+- budget.amount is a plain number: "50k" = 50000, "1.5 lakh" = 150000, "2L" = 200000.
+- arriveBy: the mode used to reach that stop; pick the realistic mode if the user didn't say and note it in assumptions.
+- Put anything you inferred in "assumptions" and anything that blocks a good plan in "questions". Keep both short.
+${base ? `
+The user is REFINING an existing plan. Current interpreted spec:
+${JSON.stringify(base)}
+Apply the user's change and return the COMPLETE updated spec. Keep every field they did not ask to change.` : ""}
+USER REQUEST:
+"""${text.slice(0, 6000)}"""`;
+}
+
+function placesPrompt(trip, gaps) {
+  return `You are the PLACES layer of a neuro-symbolic travel planner. For each city and category below, list the 3 MOST POPULAR, well-established, currently operating places a visitor would go to. Output JSON only.
+
+${gaps.map((g) => `- ${g.city}: ${g.category} (prices in ${g.currency})`).join("\n")}
+
+Return:
+{"places":[{"city":string,"category":string,"name":string,"area":string,"min":number,"max":number,"note":string}]}
+
+Rules:
+1. Exactly 3 places per city+category, using the city and category names exactly as given.
+2. min and max: approximate price range PER PERSON for a typical visit (entry, cover charge, meal or activity), in the currency given, as plain numbers. Use 0 for free places.
+3. note: one short practical line (what the price covers, best time, booking). No marketing.
+4. Only real places you are confident exist. Fewer than 3 is better than inventing one.`;
+}
+
+function itineraryPrompt(trip, skel, highlights = []) {
+  const people = trip.travelers.adults + trip.travelers.children;
+  const cap = trip.budget ? (trip.budget.scope === "per_person" ? trip.budget.amount * people : trip.budget.amount) : null;
+  const brief = { title: trip.title, origin: trip.origin.city, stops: trip.stops.map((s) => ({ city: s.city, country: s.country, nights: s.nights })), travelers: trip.travelers, interests: trip.interests, pace: trip.pace, accommodation: trip.accommodation, constraints: trip.constraints };
+  const known = highlights.filter((h) => h.places.length).map((h) => `${h.city} ${h.category}: ${h.places.map((p) => `${p.name} (${p.area}; ${p.min}–${p.max} ${h.currency} pp)`).join("; ")}`);
+  return `You are the ITINERARY layer of a neuro-symbolic travel planner. A symbolic engine has FIXED the day skeleton below; fill it, do not change it. A verifier will reject violations. Output JSON only.
+
+Trip: ${JSON.stringify(brief)}
+Day skeleton (return exactly these dates, in this order):
+${JSON.stringify(skel)}
+${known.length ? `
+Shortlisted places with per-person price ranges (schedule these first, at sensible times of day; for each, item "cost" = midpoint of the range × ${people} people, converted to ${trip.currency} if needed):
+${known.join("\n")}
+` : ""}
+Return:
+{"days":[{"date":"YYYY-MM-DD","items":[{"start":"HH:MM","end":"HH:MM","title":string,"type":"transit"|"sight"|"food"|"activity"|"rest"|"checkin","place":string,"cost":number}]}],
+ "costs":{"transport":number,"stay":number,"food":number,"activities":number,"local":number,"misc":number},
+ "tips":[string]}
+
+Hard constraints:
+1. Exactly the skeleton dates. 24-hour HH:MM times, end after start, no overlapping items in a day, nothing after 23:30.
+2. Any day with "travel" must contain a "transit" item for that journey (use the given mode, or the realistic one).
+3. Active hours per day (all types except transit and rest) must be ≤ ${KB.paceCap[trip.pace]} (pace: ${trip.pace}).
+4. All money in ${trip.currency}, for the whole group of ${people}. Item "cost" is the group cost of that item; "costs" is the full trip breakdown including transport and stays. Use realistic current prices.
+5. ${cap ? `Stay within a total of ${cap} ${trip.currency} if at all possible; if not possible, still plan sensibly and explain the gap in tips.` : "No budget given: plan mid-range."}
+6. Use real, specific, currently operating places in each city that match the interests. Respect opening hours. 3–6 items per full day.`;
+}
+
+function repairPrompt(prevJson, violations) {
+  return `Your itinerary JSON was rejected by the symbolic verifier. Fix ONLY these violations and return the complete corrected JSON in the same schema, nothing else.
+
+Violations:
+${violations.map((v) => `- ${v.msg}`).join("\n")}
+
+Previous JSON:
+${JSON.stringify(prevJson).slice(0, 60000)}`;
+}
+
+if (typeof module !== "undefined") module.exports = { D, KB, normalizeSpec, daySkeleton, buildTasks, schedule, verifyItinerary, autoFixItinerary, costNum, budgetCheck, tripChecks, ruleParse, templateItinerary, interpretPrompt, itineraryPrompt, repairPrompt, placesPrompt, interestCategories, placeHighlights, placeGaps, normalizeModelPlaces, highlightsBudget, money, worst };
+
+/* ================================================================
+   RUNTIME: adapters (LLM, storage) + pipeline orchestration + views
+   ================================================================ */
+const $ = (s, r = document) => r.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const TODAY = D.today();
+/* Home country from the device: time zone first (reliable even with en-US browsers in India), then the language region. */
+const HOME = (() => {
+  const byZone = { "Asia/Kolkata": "IN", "Asia/Calcutta": "IN", "Asia/Tokyo": "JP", "Asia/Singapore": "SG", "Asia/Dubai": "AE", "Asia/Colombo": "LK",
+    "Asia/Kathmandu": "NP", "Asia/Thimphu": "BT", "Indian/Maldives": "MV", "Asia/Bangkok": "TH", "Asia/Kuala_Lumpur": "MY", "Asia/Jakarta": "ID",
+    "Asia/Ho_Chi_Minh": "VN", "Asia/Seoul": "KR", "Asia/Shanghai": "CN", "Europe/London": "GB", "Europe/Paris": "FR", "Europe/Berlin": "DE",
+    "Europe/Rome": "IT", "Europe/Madrid": "ES", "Europe/Amsterdam": "NL", "Europe/Zurich": "CH", "Europe/Istanbul": "TR" };
+  const names = { IN: "india", JP: "japan", SG: "singapore", AE: "united arab emirates", LK: "sri lanka", NP: "nepal", BT: "bhutan", MV: "maldives",
+    TH: "thailand", MY: "malaysia", ID: "indonesia", VN: "vietnam", KR: "south korea", CN: "china", GB: "united kingdom", FR: "france", DE: "germany",
+    IT: "italy", ES: "spain", NL: "netherlands", CH: "switzerland", TR: "turkey", US: "united states", CA: "canada", AU: "australia" };
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+    let rc = byZone[tz] || (tz.startsWith("Australia/") ? "AU" : null);
+    if (!rc) rc = (navigator.languages || [navigator.language]).map((l) => /-([A-Z]{2})\b/i.exec(l || "")?.[1]?.toUpperCase()).find(Boolean);
+    if (!rc) return null;
+    return names[rc] || new Intl.DisplayNames(["en"], { type: "region" }).of(rc)?.toLowerCase() || null;
+  } catch { return null; }
+})();
+const uid = () =>"p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+/* ---------- LLM adapter: Claude (artifact runtime) → OpenAI-compatible → offline rules ---------- */
+const LLM = {
+  kind: "none", sample: null, cfg: null,
+  async init() {
+    try {
+      if (window.claude?.use) {
+        const s = await window.claude.use("sample");
+        if (s) { this.sample = s; this.kind = "claude"; return; }
+      }
+    } catch {}
+    try { this.cfg = JSON.parse(localStorage.getItem("wp.llm") || "null"); } catch { this.cfg = null; }
+    // key is optional: local servers like Ollama don't use one
+    this.kind = this.cfg?.endpoint ? "openai" : "none";
+  },
+  label() { return { claude: "Claude, on your account", openai: `${isLocal(this.cfg?.endpoint) ? "Local model" : "Your endpoint"} · ${this.cfg?.model || "model"}`, none: "Offline rule parser" }[this.kind]; },
+  async json(prompt, signal) {
+    if (this.kind === "claude") return this.sample.json(prompt, { signal, modelTier: "default", cache: false });
+    if (this.kind === "openai") return openaiJson(this.cfg, prompt, signal);
+    throw { code: "no_llm" };
+  },
+};
+const isLocal = (ep) => /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/i.test(ep || "");
+/* OpenAI-compatible chat call with real diagnostics (status, provider message, network/CORS). */
+async function openaiJson(cfg, prompt, signal, useFormat = true) {
+  const url = cfg.endpoint.replace(/\/+$/, "").replace(/\/chat\/completions$/, "") + "/chat/completions";
+  const body = { model: cfg.model || "gpt-4o-mini", temperature: 0.2, messages: [{ role: "user", content: prompt }] };
+  if (useFormat) body.response_format = { type: "json_object" };
+  const headers = { "Content-Type": "application/json" };
+  if (cfg.key) headers.Authorization = `Bearer ${cfg.key}`;
+  let r;
+  try {
+    r = await fetch(url, { method: "POST", signal, headers, body: JSON.stringify(body) });
+  } catch (e) {
+    if (signal?.aborted) throw { code: "cancelled" };
+    throw { code: "network", detail: location.protocol === "file:"
+      ? "Request blocked. Serve the folder with “python -m http.server 8000” and open http://localhost:8000 instead of double-clicking the file."
+      : isLocal(url) ? `Could not reach ${url}. Is the local server running? For Ollama, start the Ollama app (or run “ollama serve”) and check the port.`
+      : `Could not reach ${url}. Check the endpoint URL; if it is correct, this provider blocks browser requests (CORS).` };
+  }
+  let data = null, raw = "";
+  try { raw = await r.text(); data = JSON.parse(raw); } catch {}
+  if (!r.ok) {
+    const pm = data?.error?.message || data?.message || (Array.isArray(data) && data[0]?.error?.message) || raw.slice(0, 200);
+    // some providers reject response_format; retry once without it
+    if (useFormat && r.status === 400 && /response_format|json_object|not supported/i.test(pm)) return openaiJson(cfg, prompt, signal, false);
+    const hint = r.status === 401 ? " The API key is wrong or revoked."
+      : r.status === 403 ? (isLocal(url) ? " The local server rejected this page's origin; set OLLAMA_ORIGINS to allow it." : " This key isn't allowed to use that model.")
+      : r.status === 404 ? (isLocal(url) ? ` Model not installed? Run “ollama pull ${cfg.model}” (check the name with “ollama list”).` : " Wrong endpoint URL or model name.")
+      : r.status === 429 ? (/quota|billing|credit/i.test(pm) ? " The account has no credit left; add billing or use a free provider." : " Rate limited; wait a minute.")
+      : "";
+    throw { code: "http", detail: `HTTP ${r.status}: ${pm}${hint}` };
+  }
+  const txt = data?.choices?.[0]?.message?.content;
+  if (!txt) throw { code: "invalid_json", detail: "The endpoint answered but returned no message content." };
+  return tolerantJson(txt);
+}
+function tolerantJson(t) {
+  try { return JSON.parse(t); } catch {}
+  const f = /```(?:json)?\s*([\s\S]*?)```/.exec(t); if (f) try { return JSON.parse(f[1]); } catch {}
+  const a = t.indexOf("{"), b = t.lastIndexOf("}"); if (a >= 0 && b > a) try { return JSON.parse(t.slice(a, b + 1)); } catch {}
+  throw { code: "invalid_json", message: "Model reply was not JSON" };
+}
+const ERR = {
+  not_granted: "Claude access was declined for this page, so the offline parser was used.",
+  rate_limited: "Too many requests right now. Wait a minute and run it again.",
+  session_expired: "Your session expired. Sign in again, then rerun.",
+  sampling_disabled: "Claude isn't available on this account; used the offline parser.",
+  invalid_json: "The model's reply wasn't valid JSON. Run it again.",
+  refused: "The model declined this request. Rephrase it and try again.",
+  upstream_error: "The model service failed mid-request. Run it again.",
+};
+
+/* ---------- Storage adapter: artifact db (per-user, private) → Waypoint server (login) → localStorage ---------- */
+const Store = {
+  mode: "local", db: null, uid: null, user: null,
+  async init() {
+    try {
+      if (window.claude?.use) {
+        const [db, user] = await Promise.all([window.claude.use("db"), window.claude.use("user")]);
+        const id = user ? await user.id() : null;
+        if (db && id) { this.db = db; this.uid = id; this.mode = "cloud"; return; }
+      }
+    } catch {}
+    // served by server.js? /api/me answers 200 (logged in) or 401 (needs login); anything else means no server
+    try {
+      const r = await fetch("api/me", { credentials: "same-origin" });
+      if (r.status === 200 || r.status === 401) { this.mode = "server"; this.user = r.status === 200 ? (await r.json()).user : null; }
+    } catch {}
+  },
+  async api(method, url, body) {
+    // every non-GET goes out as JSON: the server refuses other writes (CSRF guard)
+    const write = method !== "GET";
+    const r = await fetch(url, { method, credentials: "same-origin", headers: write ? { "Content-Type": "application/json" } : {}, body: write ? JSON.stringify(body ?? {}) : undefined });
+    const data = await r.json().catch(() => ({}));
+    if (r.status === 401 && !url.includes("/login")) { this.user = null; showAuth(); }
+    if (!r.ok) throw new Error(data.error || `Server error (HTTP ${r.status}).`);
+    return data;
+  },
+  async login(username, password, signup) { this.user = (await this.api("POST", signup ? "api/signup" : "api/login", { username, password })).user; },
+  async logout() { try { await this.api("POST", "api/logout", {}); } catch {} this.user = null; },
+  col() { return this.db.collection("data/users/" + this.uid); },
+  localAll() { try { return JSON.parse(localStorage.getItem("wp.plans") || "{}"); } catch { return {}; } },
+  localPut(all) { try { localStorage.setItem("wp.plans", JSON.stringify(all)); return true; } catch { return false; } },
+  async list() {
+    if (this.mode === "cloud") {
+      const snap = await this.col().get();
+      return snap.docs.map((d) => d.data()).filter((p) => p && p.id).sort((a, b) => (b.updated || 0) - (a.updated || 0));
+    }
+    if (this.mode === "server") return this.user ? this.api("GET", "api/plans") : [];
+    return Object.values(this.localAll()).sort((a, b) => (b.updated || 0) - (a.updated || 0));
+  },
+  _q: Promise.resolve(),
+  save(plan) {
+    const body = JSON.parse(JSON.stringify(plan));
+    this._q = this._q.catch(() => {}).then(async () => {
+      if (this.mode === "cloud") await this.col().doc(plan.id).set(body);
+      else if (this.mode === "server") await this.api("PUT", "api/plans/" + encodeURIComponent(plan.id), body);
+      else { const all = this.localAll(); all[plan.id] = body; if (!this.localPut(all)) throw new Error("Browser storage is full or blocked."); }
+    });
+    return this._q;
+  },
+  async remove(id) {
+    if (this.mode === "cloud") await this.col().doc(id).delete();
+    else if (this.mode === "server") await this.api("DELETE", "api/plans/" + encodeURIComponent(id));
+    else { const all = this.localAll(); delete all[id]; this.localPut(all); }
+  },
+  where() { return { cloud: "Saved privately to your account.", server: `Saved to ${this.user}'s account.`, local: "Saved in this browser." }[this.mode]; },
+};
+
+/* ---------- Pipeline trace ---------- */
+const STEPS = [
+  ["interpret", "Interpret request", "neural"],
+  ["validate", "Validate & normalize", "symbolic"],
+  ["ground", "Apply knowledge rules", "symbolic"],
+  ["graph", "Build & schedule task graph", "symbolic"],
+  ["itin", "Draft day-by-day plan", "neural"],
+  ["verify", "Verify & repair", "loop"],
+  ["save", "Save plan", "storage"],
+];
+const trace = {};
+function resetTrace() { STEPS.forEach(([id]) => (trace[id] = { st: "idle", note: "" })); renderTrace(); }
+function step(id, st, note = "") { trace[id] = { st, note }; renderTrace(); }
+function renderTrace() {
+  $("#trace").innerHTML = STEPS.map(([id, label, layer], i) => {
+    const t = trace[id] || { st: "idle" };
+    return `<li class="st-${t.st}"><span class="dot" aria-hidden="true">${t.st === "run" ? "" : t.st === "ok" ? "✓" : t.st === "warn" ? "!" : t.st === "fail" ? "×" : i + 1}</span>
+      <div><div class="tl">${label} <span class="layer l-${layer}">${layer}</span></div>${t.note ? `<div class="tn">${esc(t.note)}</div>` : ""}</div></li>`;
+  }).join("");
+}
+
+/* ---------- Orchestration ---------- */
+let ctl = null, current = null, plans = [], tab = "itin", tripIdx = 0;
+
+async function run(text, refine) {
+  ctl?.abort(); ctl = new AbortController(); const signal = ctl.signal;
+  setBusy(true); resetTrace(); setNote("");
+  const engine = LLM.kind;
+  try {
+    // 1. INTERPRET (neural, or rule fallback)
+    step("interpret", "run", engine === "none" ? "Offline rule parser" : "Asking " + LLM.label());
+    let raw, usedLLM = engine !== "none";
+    const base = refine && current ? current.raw : null;
+    if (usedLLM) {
+      try { raw = await LLM.json(interpretPrompt(text, TODAY, base), signal); }
+      catch (e) {
+        if (e?.code === "cancelled" || signal.aborted) throw e;
+        if (["not_granted", "sampling_disabled"].includes(e?.code)) LLM.kind = "none";
+        LLM.lastError = e?.detail || ERR[e?.code] || "The model could not be reached.";
+        setNote("Language model failed: " + LLM.lastError + " Used the offline parser for this run.");
+        usedLLM = false; raw = ruleParse(text, TODAY);
+      }
+    } else raw = ruleParse(text, TODAY);
+    if (!usedLLM && base) setNote("Refining needs a working language model, so your text was planned as a new trip.", true);
+    LLM.lastError = usedLLM ? null : LLM.lastError; renderEngine();
+    step("interpret", "ok", `${arr(raw?.trips).length} trip(s) identified`);
+
+    // 2. VALIDATE
+    step("validate", "run");
+    const spec = normalizeSpec(raw, TODAY, { home: HOME });
+    if (!spec.trips.length) { step("validate", "fail", spec.issues.map((i) => i.msg).join(" ")); throw { code: "spec", message: spec.issues.map((i) => i.msg).join(" ") || "Nothing to plan." }; }
+    const nFix = spec.trips.reduce((a, t) => a + t.fixes.length + t.assumed.length, 0);
+    step("validate", spec.issues.some((i) => i.sev === "fail") ? "warn" : "ok", `${spec.trips.length} trip(s) valid · ${nFix} assumption(s)/correction(s)`);
+
+    // 3. GROUND
+    step("ground", "run");
+    const outTrips = [];
+    for (const t of spec.trips) outTrips.push({ ...t, skeleton: daySkeleton(t) });
+    // places shortlist: knowledge base first; the model only fills stop × interest pairs the KB doesn't cover
+    let fromModel = 0;
+    for (const t of outTrips) {
+      const gaps = placeGaps(t);
+      let suggested = [];
+      if (usedLLM && gaps.length) {
+        step("ground", "run", `asking the model for places: ${gaps.map((g) => `${g.city} ${g.category}`).join(", ")}`);
+        try { suggested = normalizeModelPlaces(await LLM.json(placesPrompt(t, gaps), signal), gaps); fromModel += suggested.length; }
+        catch (e) { if (e?.code === "cancelled" || signal.aborted) throw e; }
+      }
+      t.highlights = placeHighlights(t, suggested);
+    }
+    const nPlaces = outTrips.reduce((a, t) => a + t.highlights.reduce((b, h) => b + h.places.length, 0), 0);
+    step("ground", "ok", `${outTrips.reduce((a, t) => a + t.skeleton.length, 0)} days framed · border: ${outTrips.map((t) => (t.international === null ? "unknown" : t.international ? "international" : "domestic")).join(", ")} · ${nPlaces} places shortlisted${fromModel ? ` (${fromModel} from the model)` : ""}`);
+
+    // 4. GRAPH
+    step("graph", "run");
+    for (const t of outTrips) t.sched = schedule(buildTasks(t), t.startDate, TODAY);
+    const late = outTrips.reduce((a, t) => a + (t.sched.ok ? t.sched.tasks.filter((x) => x.status === "late" || x.status === "infeasible").length : 0), 0);
+    step("graph", outTrips.every((t) => t.sched.ok) ? (late ? "warn" : "ok") : "fail", `${outTrips.reduce((a, t) => a + t.sched.tasks.length, 0)} tasks · ${late} behind schedule`);
+
+    // 5 + 6. ITINERARY with verify → repair loop (max 2 LLM repairs, then deterministic fix)
+    let anyWarn = false;
+    for (let i = 0; i < outTrips.length; i++) {
+      const t = outTrips[i];
+      const tag = outTrips.length > 1 ? `Trip ${i + 1}/${outTrips.length}: ` : "";
+      step("itin", "run", tag + (usedLLM ? "drafting with the model" : "offline template"));
+      let itin, log = [];
+      if (usedLLM) {
+        try { itin = await LLM.json(itineraryPrompt(t, t.skeleton, t.highlights), signal); }
+        catch (e) { if (e?.code === "cancelled" || signal.aborted) throw e; log.push(`Draft failed: ${e?.detail || e?.code || "error"}. Used template.`); setNote((e?.detail || ERR[e?.code] || "Itinerary call failed.") + " The day plan is a template."); itin = templateItinerary(t, t.skeleton, t.highlights); }
+      } else itin = templateItinerary(t, t.skeleton, t.highlights);
+      step("itin", "ok", tag + `${arr(itin?.days).length} day(s) drafted`);
+
+      step("verify", "run", tag + "checking constraints");
+      let viol = verifyItinerary(t, itin, t.skeleton);
+      log.push(`Attempt 1: ${viol.filter((x) => x.sev === "fail").length} hard violation(s).`);
+      for (let k = 0; usedLLM && k < 2 && viol.some((x) => x.sev === "fail"); k++) {
+        step("verify", "run", tag + `repair round ${k + 1}: ${viol.filter((x) => x.sev === "fail").length} violation(s)`);
+        try { itin = await LLM.json(repairPrompt(itin, viol.filter((x) => x.sev === "fail")), signal); }
+        catch (e) { if (e?.code === "cancelled" || signal.aborted) throw e; log.push(`Repair ${k + 1} failed: ${e?.detail || e?.code || "error"}.`); break; }
+        viol = verifyItinerary(t, itin, t.skeleton);
+        log.push(`Attempt ${k + 2}: ${viol.filter((x) => x.sev === "fail").length} hard violation(s).`);
+      }
+      const fixed = autoFixItinerary(t, itin, t.skeleton);
+      t.itin = fixed.itin; t.itinFixes = fixed.fixes;
+      if (fixed.fixes.length) log.push(`Deterministic repair applied ${fixed.fixes.length} change(s).`);
+      const finalViol = verifyItinerary(t, t.itin, t.skeleton);
+      t.repairLog = log;
+      t.budget2 = budgetCheck(t, t.itin);
+      t.checks = tripChecks(t, t.sched, [...finalViol, ...fixed.fixes.map((m) => ({ code: "coverage", sev: "warn", msg: `Auto-repaired: ${m}` }))], t.budget2, TODAY);
+      t.verdict = worst(t.checks.map((c) => c.sev));
+      if (t.verdict !== "pass") anyWarn = true;
+    }
+    step("itin", "ok", `${outTrips.length} itinerary(ies) drafted`);
+    step("verify", outTrips.some((t) => t.verdict === "fail") ? "fail" : anyWarn ? "warn" : "ok", outTrips.map((t) => `${t.checks.filter((c) => c.sev === "pass").length}/${t.checks.length} checks pass`).join(" · "));
+
+    // 7. SAVE
+    step("save", "run");
+    const now = Date.now();
+    const plan = {
+      id: refine && current ? current.id : uid(),
+      created: refine && current ? current.created : now, updated: now,
+      title: outTrips.map((t) => t.title).join(" + ").slice(0, 120),
+      inputs: [...(refine && current ? current.inputs : []), { text, at: now, engine: usedLLM ? LLM.kind : "rules" }].slice(-10),
+      raw, spec: { assumptions: spec.assumptions, questions: spec.questions, issues: spec.issues },
+      trips: outTrips.map(slimTrip), done: refine && current ? current.done || {} : {},
+    };
+    current = plan; tripIdx = 0;
+    renderPlan();
+    try { await Store.save(plan); step("save", "ok", Store.mode === "local" ? "Saved in this browser" : "Saved to your account"); await refreshList(); }
+    catch (e) { step("save", "fail", e?.code === "quota_exceeded" ? "Storage is full; delete old plans." : "Could not save; the plan is still shown."); }
+  } catch (e) {
+    if (e?.code === "cancelled" || signal.aborted) { setNote("Stopped."); STEPS.forEach(([id]) => trace[id].st === "run" && step(id, "idle", "stopped")); }
+    else if (e?.code === "spec") setNote(e.message);
+    else { setNote(e?.detail || ERR[e?.code] || "Something went wrong: " + (e?.message || e?.code || e)); console.error(e); }
+  } finally { setBusy(false); }
+}
+function slimTrip(t) {
+  return { title: t.title, origin: t.origin, stops: t.stops, startDate: t.startDate, endDate: t.endDate, nights: t.nights,
+    travelers: t.travelers, budget: t.budget, currency: t.currency, pace: t.pace, interests: t.interests, constraints: t.constraints,
+    accommodation: t.accommodation, returnBy: t.returnBy, international: t.international, issues: t.issues, fixes: t.fixes, assumed: t.assumed,
+    skeleton: t.skeleton, tasks: t.sched.tasks, schedOk: t.sched.ok, itin: t.itin, itinFixes: t.itinFixes, repairLog: t.repairLog,
+    budget2: t.budget2, checks: t.checks, verdict: t.verdict, highlights: t.highlights || [] };
+}
+
+/* ---------- Views ---------- */
+function setBusy(b) { $("#go").disabled = b; $("#stop").hidden = !b; $("#q").readOnly = b; document.body.classList.toggle("busy", b); }
+function setNote(m, append) { const n = $("#note"); const t = append && n.textContent && !n.hidden ? n.textContent + " " + m : m; n.textContent = t; n.hidden = !t; }
+const VERD = { pass: "Verified", warn: "Verified with warnings", fail: "Needs attention" };
+
+function renderPlan() {
+  const el = $("#plan");
+  if (!current) { el.innerHTML = `<div class="empty"><h2>No plan open</h2><p>Describe a trip on the left, or open a saved plan.</p></div>`; syncRefine(); return; }
+  const t = current.trips[tripIdx] || current.trips[0];
+  const route = [t.origin.city || "Home", ...t.stops.map((s) => s.city), t.origin.city || "Home"];
+  el.innerHTML = `
+    <header class="ph">
+      <div class="ph-top">
+        <div class="eyebrow">${current.example ? '<span class="tag-ex">Example</span> ' : ""}${current.trips.length > 1 ? `${current.trips.length} trips in this plan` : "Plan"} · updated ${new Date(current.updated).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</div>
+        <span class="verdict v-${t.verdict}">${VERD[t.verdict]}</span>
+      </div>
+      ${current.trips.length > 1 ? `<div class="trips" role="tablist">${current.trips.map((x, i) => `<button role="tab" aria-selected="${i === tripIdx}" data-trip="${i}"><span class="vd v-${x.verdict}"></span>${esc(x.title)}</button>`).join("")}</div>` : ""}
+      <h2 class="pt">${esc(t.title)}</h2>
+      <div class="board" aria-label="Route">${route.map((c, i) => `<div class="stn"><span class="code">${esc(code(c))}</span><span class="cn">${esc(c)}</span>${i > 0 && i < route.length - 1 ? `<span class="nt">${t.stops[i - 1].nights}N · ${D.fmt(t.stops[i - 1].startDate)}</span>` : `<span class="nt">${D.fmt(i ? t.endDate : t.startDate)}</span>`}</div>${i < route.length - 1 ? `<span class="arr">${esc(modeOf(t, i))}</span>` : ""}`).join("")}</div>
+      <dl class="facts">
+        <div><dt>Dates</dt><dd>${D.fmtY(t.startDate)} – ${D.fmtY(t.endDate)}</dd></div>
+        <div><dt>Nights</dt><dd>${t.nights}</dd></div>
+        <div><dt>Travellers</dt><dd>${t.travelers.adults} adult${t.travelers.adults > 1 ? "s" : ""}${t.travelers.children ? `, ${t.travelers.children} child${t.travelers.children > 1 ? "ren" : ""}` : ""}</dd></div>
+        <div><dt>Budget</dt><dd>${t.budget ? money(t.budget.amount, t.budget.currency) + (t.budget.scope === "per_person" ? " pp" : "") : "Not set"}</dd></div>
+        <div><dt>Pace</dt><dd>${t.pace}</dd></div>
+        <div><dt>Border</dt><dd>${t.international === null ? "Unknown" : t.international ? "International" : "Domestic"}</dd></div>
+      </dl>
+    </header>
+    <nav class="tabs" role="tablist">${[["itin", "Itinerary"], ["places", "Places"], ["tasks", "Tasks & graph"], ["verify", "Verification"], ["budget", "Budget"], ["spec", "Spec"]].map(([k, l]) => `<button role="tab" data-tab="${k}" aria-selected="${tab === k}">${l}${k === "verify" ? ` <span class="cnt">${t.checks.filter((c) => c.sev === "pass").length}/${t.checks.length}</span>` : ""}${k === "tasks" ? ` <span class="cnt">${doneCount(t)}/${t.tasks.length}</span>` : ""}</button>`).join("")}</nav>
+    <section class="tabpane">${({ itin: viewItin, places: viewPlaces, tasks: viewTasks, verify: viewVerify, budget: viewBudget, spec: viewSpec })[tab](t)}</section>
+    <footer class="pf">
+      <div class="row"><button class="ghost" id="del">Delete plan</button><button class="ghost" id="dlPdf">Download PDF</button><button class="ghost" id="dlJson">Download JSON</button></div>
+      <span class="muted">${current.example ? "Example data, not saved." : Store.where()}</span>
+    </footer>`;
+  syncRefine();
+}
+function code(c) { const w = String(c).replace(/[^A-Za-z ]/g, "").trim().split(/\s+/); return (w.length > 1 ? w.map((x) => x[0]).join("") : w[0]).slice(0, 3).toUpperCase() || "—"; }
+function modeOf(t, i) { const m = i === t.stops.length ? t.returnBy : t.stops[i].arriveBy; return m || "→"; }
+function doneCount(t) { const d = current.done || {}; return t.tasks.filter((x) => d[`${tripIdx}:${x.id}`]).length; }
+
+function viewItin(t) {
+  const sk = Object.fromEntries(t.skeleton.map((s) => [s.date, s]));
+  return `<div class="days">${t.itin.days.map((d, i) => {
+    const s = sk[d.date] || {};
+    const cost = d.items.reduce((a, it) => a + (Number(it.cost) || 0), 0);
+    return `<article class="day">
+      <div class="dh"><div class="dd"><span class="dn">Day ${i + 1}</span><span class="dt">${D.dow(d.date)} ${D.fmt(d.date)}</span></div>
+      <div class="dc">${s.travel ? `<span class="trv">${esc(s.travel.from)} → ${esc(s.travel.to)}${s.travel.mode ? ` · ${esc(s.travel.mode)}` : ""}</span>` : `<span>${esc(s.city || "")}</span>`}</div>
+      ${cost ? `<div class="dcost">${money(cost, t.currency)}</div>` : ""}</div>
+      <ol class="items">${d.items.map((it) => `<li class="ty-${esc(it.type)}"><span class="tm">${esc(it.start)}<i>${esc(it.end)}</i></span><div class="ib"><div class="it">${esc(it.title)}${it.auto ? ' <span class="auto">auto-added</span>' : ""}</div>${it.place ? `<div class="ip">${esc(it.place)}</div>` : ""}</div><span class="chip">${esc(it.type)}</span>${Number(it.cost) > 0 ? `<span class="ic">${money(it.cost, t.currency)}</span>` : '<span class="ic"></span>'}</li>`).join("") || '<li class="none">Open day</li>'}</ol>
+    </article>`;
+  }).join("")}</div>
+  ${t.itin.tips?.length ? `<div class="tips"><h3>Notes from the planner</h3><ul>${t.itin.tips.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}`;
+}
+
+const CAT = { nightlife: "Nightlife", beaches: "Beaches", food: "Food", adventure: "Adventure", nature: "Nature", sights: "Sights" };
+const SRC = { kb: "Knowledge base", model: "Model suggestion · verify", none: "No data yet" };
+const priceRange = (min, max, cur) => (max === 0 ? "Free" : min === max ? money(min, cur) : `${money(min, cur)}–${money(max, cur)}`);
+// "visit everything" range for the group, one line per currency
+function placesTotal(t) {
+  const people = t.travelers.adults + t.travelers.children;
+  const tot = Object.entries(highlightsBudget(t, t.highlights));
+  if (!tot.length) return "";
+  const cap = t.budget ? (t.budget.scope === "per_person" ? t.budget.amount * people : t.budget.amount) : null;
+  const same = cap && tot.length === 1 && tot[0][0] === t.budget.currency ? tot[0][1] : null;
+  const share = same ? ` That's ${Math.round((same.min / cap) * 100)}–${Math.round((same.max / cap) * 100)}% of your ${money(cap, t.budget.currency)} budget, before travel and stays.` : "";
+  return `<p class="pl-total">If you visit all ${tot.reduce((a, [, v]) => a + v.count, 0)} shortlisted places: <b>${tot.map(([cur, v]) => priceRange(v.min, v.max, cur)).join(" + ")}</b> for ${people} ${people > 1 ? "people" : "person"}.${share}</p>`;
+}
+function viewPlaces(t) {
+  const hs = t.highlights || [];
+  if (!hs.length) return `<div class="empty sm"><p>No places shortlist for this plan. Plan it again to get one.</p></div>`;
+  const people = t.travelers.adults + t.travelers.children;
+  return `<p class="cap">The 3 most popular places for each of your interests, with approximate prices per person. Use them to judge the budget before you book. Prices are rough guides, not quotes.</p>
+  <div class="pl">${hs.map((h) => `<section class="pl-card">
+    <div class="pl-h"><h4>${esc(h.city)} · ${CAT[h.category] || esc(h.category)}</h4><span class="pl-src s-${h.source}">${SRC[h.source]}</span></div>
+    ${h.places.length ? `<ol>${h.places.map((p) => `<li><div class="pl-n">${esc(p.name)}${p.area ? ` <span class="muted">· ${esc(p.area)}</span>` : ""}</div>
+      <div class="pl-p"><span>${priceRange(p.min, p.max, h.currency)}${p.max ? " pp" : ""}</span>${p.max && people > 1 ? `<span class="muted">${priceRange(p.min * people, p.max * people, h.currency)} for ${people}</span>` : ""}</div>
+      ${p.note ? `<div class="pl-note muted">${esc(p.note)}</div>` : ""}</li>`).join("")}</ol>`
+      : `<p class="muted sm">Not in the knowledge base yet. Connect a language model and plan again for suggestions.</p>`}
+  </section>`).join("")}</div>
+  ${placesTotal(t)}`;
+}
+
+function viewTasks(t) {
+  const d = current.done || {};
+  return `${dagSvg(t)}
+  <p class="cap">Arrows point from a prerequisite to the task that needs it. Deadlines are computed backwards from departure: each task's own lead time, pulled earlier when a dependent task needs it sooner.</p>
+  <table class="tt"><thead><tr><th></th><th>Task</th><th>Start by</th><th>Due</th><th>After</th><th>Rule</th></tr></thead><tbody>
+  ${t.tasks.map((x) => `<tr class="s-${x.status}${d[`${tripIdx}:${x.id}`] ? " done" : ""}">
+    <td><input type="checkbox" id="tk-${tripIdx}-${x.id}" data-task="${x.id}" ${d[`${tripIdx}:${x.id}`] ? "checked" : ""} aria-label="Mark done"></td>
+    <td><label for="tk-${tripIdx}-${x.id}">${esc(x.title)}</label><span class="st">${x.status === "infeasible" ? "cannot finish before departure" : x.status === "late" ? `behind schedule (ideally by ${D.fmt(x.due)}), do now` : x.status === "urgent" ? "start now" : `${x.slack} days slack`}</span></td>
+    <td class="num">${actDate(x.startBy)}</td><td class="num">${actDate(x.due)}</td>
+    <td class="deps">${x.deps.map((y) => `<code>${y}</code>`).join(" ") || "—"}</td>
+    <td><abbr title="${esc(KB.rules[x.rule])}">${x.rule}</abbr></td></tr>`).join("")}
+  </tbody></table>`;
+}
+// a date that has already passed can't be acted on: show "Today" instead
+const actDate = (iso) => (iso < TODAY ? "Today" : D.fmt(iso));
+function dagSvg(t) {
+  const W = 172, H = 46, GX = 44, GY = 14;
+  const cols = {};
+  t.tasks.forEach((x) => (cols[x.depth] = cols[x.depth] || []).push(x));
+  const pos = {};
+  const maxRows = Math.max(...Object.values(cols).map((c) => c.length));
+  Object.entries(cols).forEach(([dep, list]) => list.forEach((x, r) => (pos[x.id] = { x: 10 + dep * (W + GX), y: 10 + r * (H + GY) + ((maxRows - list.length) * (H + GY)) / 2 })));
+  const width = 20 + (Object.keys(cols).length) * (W + GX) - GX, height = 20 + maxRows * (H + GY) - GY;
+  const d = current.done || {};
+  const edges = t.tasks.flatMap((x) => x.deps.filter((y) => pos[y]).map((y) => {
+    const a = pos[y], b = pos[x.id], x1 = a.x + W, y1 = a.y + H / 2, x2 = b.x, y2 = b.y + H / 2, mx = (x1 + x2) / 2;
+    return `<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2 - 6},${y2}" class="edge" marker-end="url(#ah)"/>`;
+  })).join("");
+  const nodes = t.tasks.map((x) => { const p = pos[x.id]; const lbl = x.title.length > 26 ? x.title.slice(0, 25) + "…" : x.title; return `<g class="node n-${x.status}${d[`${tripIdx}:${x.id}`] ? " n-done" : ""}" transform="translate(${p.x},${p.y})"><title>${esc(x.title)}</title><rect width="${W}" height="${H}" rx="6"/><text x="10" y="18" class="nid">${esc(x.id)} · due ${actDate(x.due)}</text><text x="10" y="35" class="nt2">${esc(lbl)}</text></g>`; }).join("");
+  return `<div class="dagwrap"><svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="Task dependency graph"><defs><marker id="ah" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 z" class="ahd"/></marker></defs>${edges}${nodes}</svg></div>`;
+}
+
+function viewVerify(t) {
+  const groups = [["neural", "Neural layer"], ["symbolic", "Symbolic checks"]];
+  return `<div class="checks">${groups.map(([g, gl]) => `<h3>${gl}</h3><ul>${t.checks.filter((c) => c.layer === g).map((c) => `<li class="ck c-${c.sev}"><span class="cki" aria-label="${c.sev}">${c.sev === "pass" ? "✓" : c.sev === "warn" ? "!" : "×"}</span><div><div class="ckl">${esc(c.label)}</div><ul class="ckd">${c.detail.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div></li>`).join("")}</ul>`).join("")}</div>
+  <div class="cols2">
+    <div><h3>Repair log</h3><ol class="log">${(t.repairLog || []).map((x) => `<li>${esc(x)}</li>`).join("")}</ol></div>
+    <div><h3>Knowledge rules fired</h3><ul class="rules">${[...new Set(t.tasks.map((x) => x.rule))].map((r) => `<li><code>${r}</code> ${esc(KB.rules[r])}</li>`).join("")}</ul></div>
+  </div>
+  ${current.spec.questions?.length ? `<div class="qs"><h3>Open questions</h3><ul>${current.spec.questions.map((q) => `<li>${esc(q)}</li>`).join("")}</ul><p class="muted">Answer them with “Refine this plan” on the left.</p></div>` : ""}
+  ${current.spec.issues?.length ? `<div class="qs"><h3>Plan-level issues</h3><ul>${current.spec.issues.map((q) => `<li>${esc(q.msg)}</li>`).join("")}</ul></div>` : ""}`;
+}
+
+function viewBudget(t) {
+  const c = t.itin.costs, b = t.budget2;
+  if (!c) return `<div class="empty sm"><p>${esc(b.msg)}</p>
+    ${t.budget ? `<p>Your budget: <b>${money(t.budget.amount, t.budget.currency)}${t.budget.scope === "per_person" ? " per person" : " total"}</b></p>` : ""}
+    <p class="muted">Cost estimates come from the language model. This plan was made without one (offline parser, or the model call failed), so there are no figures to compare. Connect a model and plan again.</p>
+    ${placesTotal(t)}</div>`;
+  const ents = Object.entries(c).filter(([, v]) => v > 0).sort((a, b2) => b2[1] - a[1]);
+  const total = ents.reduce((a, [, v]) => a + v, 0);
+  const scale = Math.max(total, b.cap || 0);
+  const people = t.travelers.adults + t.travelers.children;
+  return `<div class="bud">
+    <div class="bnum"><div><span class="lbl">Estimated total</span><span class="big">${money(total, t.currency)}</span></div>
+      <div><span class="lbl">Budget</span><span class="big">${b.cap ? money(b.cap, t.currency) : "—"}</span></div>
+      <div><span class="lbl">Per person</span><span class="big">${money(total / people, t.currency)}</span></div></div>
+    <div class="bar" role="img" aria-label="Cost breakdown">${ents.map(([k, v], i) => `<span class="seg s${i % 6}" style="width:${(v / scale) * 100}%" title="${esc(k)}: ${money(v, t.currency)}"></span>`).join("")}${b.cap ? `<span class="capline" style="left:${(b.cap / scale) * 100}%"><i>budget</i></span>` : ""}</div>
+    <ul class="legend">${ents.map(([k, v], i) => `<li><span class="sw s${i % 6}"></span><span class="lk">${esc(k)}</span><span class="num">${money(v, t.currency)}</span><span class="num muted">${Math.round((v / total) * 100)}%</span></li>`).join("")}</ul>
+    <p class="verdict-line c-${b.sev}">${esc(b.msg)}</p>
+    ${placesTotal(t)}
+    <p class="muted">Figures are model estimates of typical prices, not quotes. Check live fares before booking.</p></div>`;
+}
+function viewSpec(t) {
+  const { skeleton, tasks, itin, checks, ...rest } = t;
+  return `<p class="cap">The normalized trip after validation. This is what the symbolic engine plans from.</p>
+  <div class="inputs"><h3>Your inputs</h3><ol>${current.inputs.map((x) => `<li><span class="muted">${new Date(x.at).toLocaleString([], { dateStyle: "short", timeStyle: "short" })} · ${esc(x.engine)}</span><br>${esc(x.text)}</li>`).join("")}</ol></div>
+  <pre class="json">${esc(JSON.stringify(rest, null, 2))}</pre>`;
+}
+
+function renderList() {
+  const el = $("#saved");
+  if (!plans.length) { el.innerHTML = `<li class="muted sm">No saved plans yet. Plans appear here after you run one.</li>`; return; }
+  el.innerHTML = plans.map((p) => `<li><button data-open="${p.id}" class="${current?.id === p.id ? "on" : ""}"><span class="vd v-${worst(p.trips.map((t) => t.verdict))}"></span><span class="sn">${esc(p.title)}</span><span class="sd">${D.fmt(p.trips[0]?.startDate)}${p.trips.length > 1 ? ` · ${p.trips.length} trips` : ""}</span></button></li>`).join("");
+}
+async function refreshList() { try { plans = await Store.list(); } catch { plans = []; } renderList(); }
+function syncRefine() { const r = $("#refineRow"); r.hidden = !current || current.example; if (r.hidden) $("#refine").checked = false; }
+
+/* ---------- Events ---------- */
+let saveT = null;
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.tab) { tab = b.dataset.tab; renderPlan(); }
+  else if (b.dataset.trip) { tripIdx = +b.dataset.trip; renderPlan(); }
+  else if (b.dataset.open) { const p = plans.find((x) => x.id === b.dataset.open); if (p) { current = p; tripIdx = 0; renderPlan(); renderList(); } }
+  else if (b.dataset.ex) { $("#q").value = b.dataset.ex; $("#q").focus(); }
+  else if (b.id === "del") {
+    if (current?.example) { current = null; renderPlan(); return; }
+    if (b.dataset.armed) { const id = current.id; current = null; renderPlan(); try { await Store.remove(id); } catch {} await refreshList(); }
+    else { b.dataset.armed = "1"; b.textContent = "Click again to delete"; b.classList.add("danger"); setTimeout(() => { if (b.isConnected) { delete b.dataset.armed; b.textContent = "Delete plan"; b.classList.remove("danger"); } }, 4000); }
+  }
+  else if (b.id === "stop") ctl?.abort();
+  else if (b.id === "dlJson" && current) downloadJson(current);
+  else if (b.id === "dlPdf" && current) downloadPdf(current);
+  else if (b.id === "saveCfg") {
+    const cfg = { endpoint: $("#cfgEp").value.trim(), model: $("#cfgModel").value.trim(), key: $("#cfgKey").value.trim() };
+    try { localStorage.setItem("wp.llm", JSON.stringify(cfg)); } catch {}
+    await LLM.init(); renderEngine();
+    const out = $("#cfgOut"); out.hidden = false;
+    if (LLM.kind !== "openai") { out.textContent = "Fill in the endpoint (and the key, unless it's a local server like Ollama)."; return; }
+    out.textContent = isLocal(cfg.endpoint) ? "Testing the connection… the first call loads the model, which can take a minute." : "Testing the connection…";
+    try { const j = await openaiJson(LLM.cfg, 'Reply with only this JSON: {"ok": true}'); out.textContent = j?.ok ? "Connected. The model answered with valid JSON." : "Connected, but the reply wasn't the expected JSON."; }
+    catch (e) { out.textContent = "Connection failed. " + (e?.detail || e?.code || ""); }
+  }
+});
+document.addEventListener("change", (e) => {
+  const c = e.target.closest("input[data-task]"); if (!c || !current) return;
+  current.done = current.done || {};
+  const k = `${tripIdx}:${c.dataset.task}`;
+  if (c.checked) current.done[k] = true; else delete current.done[k];
+  renderPlan();
+  if (current.example) return;
+  current.updated = Date.now();
+  clearTimeout(saveT); const snap = current;
+  saveT = setTimeout(() => Store.save(snap).catch(() => setNote("Couldn't save task progress.")), 700);
+});
+$("#form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const text = $("#q").value.trim();
+  if (text.length < 4) { setNote("Describe where you want to go, for how long, and with whom."); return; }
+  const refine = $("#refine").checked; $("#refine").checked = false;
+  run(text, refine);
+});
+$("#q").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) $("#form").requestSubmit(); });
+
+function renderEngine() {
+  const bad = LLM.kind === "none" || LLM.lastError;
+  $("#engine").innerHTML = `<span class="vd v-${bad ? "warn" : "pass"}"></span>${esc(LLM.label())}${LLM.lastError ? " · last call failed" : ""}`;
+  $("#cfg").hidden = LLM.kind === "claude";
+  if (LLM.cfg) { $("#cfgEp").value = LLM.cfg.endpoint || ""; $("#cfgModel").value = LLM.cfg.model || ""; $("#cfgKey").value = LLM.cfg.key || ""; }
+  else { $("#cfgEp").value = "http://localhost:11434/v1"; $("#cfgModel").value = "qwen2.5:7b"; }
+  if (LLM.kind === "none" && location.protocol !== "https:" && !window.claude) $("#cfg").open = true;
+}
+
+/* ---------- Example (computed live by the same symbolic engine) ---------- */
+function buildExample() {
+  const s = D.add(TODAY, 50);
+  const raw = { trips: [{ title: "Kerala: hills and backwaters", origin: { city: "Chennai", country: "India" },
+    stops: [{ city: "Kochi", country: "India", nights: 2, arriveBy: "flight" }, { city: "Munnar", country: "India", nights: 2, arriveBy: "car" }, { city: "Alleppey", country: "India", nights: 1, arriveBy: "car" }],
+    startDate: s, returnBy: "flight", travelers: { adults: 2, children: 0 }, budget: { amount: 60000, currency: "INR", scope: "total" },
+    interests: ["tea estates", "backwaters", "Kerala food"], pace: "relaxed" }], assumptions: [], questions: [] };
+  const I = (a, b, title, type, place, cost) => ({ start: a, end: b, title, type, place, cost });
+  const days = [
+    [I("06:10", "07:30", "Flight MAA → COK", "transit", "Chennai → Cochin Intl", 9000), I("09:00", "10:00", "Check in, Fort Kochi homestay", "checkin", "Fort Kochi", 0), I("11:00", "13:00", "Chinese fishing nets and the waterfront", "sight", "Fort Kochi beach", 0), I("13:00", "14:00", "Lunch", "food", "Kashi Art Cafe", 900), I("15:00", "17:00", "Mattancherry Palace and Jew Town", "sight", "Mattancherry", 100), I("19:30", "20:30", "Seafood dinner", "food", "Fort House", 1800)],
+    [I("09:30", "11:30", "Kerala Folklore Museum", "sight", "Thevara", 400), I("12:00", "13:00", "Kerala meals lunch", "food", "Dhe Puttu", 700), I("17:00", "19:00", "Kathakali performance", "activity", "Kerala Kathakali Centre", 1000), I("19:30", "20:30", "Dinner", "food", "Fort Kochi", 1200)],
+    [I("08:00", "12:30", "Drive Kochi → Munnar via Cheeyappara falls", "transit", "NH 85", 4500), I("13:00", "14:00", "Lunch", "food", "Munnar town", 800), I("14:30", "15:30", "Check in", "checkin", "Chithirapuram", 0), I("16:00", "17:30", "KDHP Tea Museum", "sight", "Nallathanni", 300), I("19:30", "20:30", "Dinner", "food", "Hotel", 1200)],
+    [I("08:00", "11:00", "Eravikulam National Park", "sight", "Rajamala", 500), I("13:00", "14:00", "Lunch", "food", "Saravana Bhavan Munnar", 600), I("15:00", "17:00", "Guided tea estate walk", "activity", "Lockhart estate", 1200), I("19:30", "20:30", "Dinner", "food", "Hotel", 1200)],
+    [I("08:00", "12:30", "Drive Munnar → Alleppey", "transit", "via Kottayam", 4500), I("12:30", "17:00", "Houseboat cruise on the backwaters, lunch on board", "activity", "Vembanad Lake", 0), I("19:00", "20:00", "Dinner on the houseboat", "food", "Houseboat", 0)],
+    [I("09:00", "10:00", "Check out", "checkin", "Finishing Point", 0), I("10:30", "12:00", "Alappuzha beach and pier", "sight", "Alappuzha", 0), I("13:00", "14:00", "Karimeen lunch", "food", "Thaff", 900), I("14:30", "19:30", "Drive to COK, flight COK → MAA", "transit", "Cochin Intl → Chennai", 9000)],
+  ];
+  const spec = normalizeSpec(raw, TODAY, { home: HOME });
+  const t = spec.trips[0];
+  t.skeleton = daySkeleton(t);
+  t.highlights = placeHighlights(t);
+  t.sched = schedule(buildTasks(t), t.startDate, TODAY);
+  const itin = { days: t.skeleton.map((sk, i) => ({ date: sk.date, items: days[i] })), costs: { transport: 27000, stay: 25000, food: 9500, activities: 3500, local: 2000, misc: 1500 },
+    tips: ["Houseboat price covers the overnight stay plus lunch and dinner on board.", "The estimate runs about 14% over budget. Swapping the houseboat for a day cruise and a homestay saves roughly ₹6,000."] };
+  const viol = verifyItinerary(t, itin, t.skeleton);
+  const fx = autoFixItinerary(t, itin, t.skeleton);
+  t.itin = fx.itin; t.itinFixes = fx.fixes; t.repairLog = [`Attempt 1: ${viol.filter((x) => x.sev === "fail").length} hard violation(s).`];
+  t.budget2 = budgetCheck(t, t.itin);
+  t.checks = tripChecks(t, t.sched, verifyItinerary(t, t.itin, t.skeleton), t.budget2, TODAY);
+  t.verdict = worst(t.checks.map((c) => c.sev));
+  return { id: "example", example: true, created: Date.now(), updated: Date.now(), title: t.title,
+    inputs: [{ text: "Chennai to Kochi, Munnar and Alleppey, 5 nights, 2 of us, ₹60k, relaxed, tea estates and backwaters", at: Date.now(), engine: "example" }],
+    raw, spec: { assumptions: [], questions: [], issues: [] }, trips: [slimTrip(t)], done: {} };
+}
+
+/* ---------- Boot ---------- */
+(async function boot() {
+  resetTrace();
+  current = buildExample(); renderPlan();
+  $("#saved").innerHTML = `<li class="muted sm">Loading saved plans…</li>`;
+  $("#engine").textContent = "Connecting…";
+  await Promise.all([LLM.init(), Store.init()]);
+  renderEngine();
+  if (Store.mode === "server" && !Store.user) { showAuth(); return; }
+  await enterApp();
+})();
+async function enterApp() {
+  $("#auth").hidden = true; $("#app").hidden = false;
+  $("#who").hidden = Store.mode !== "server";
+  $("#whoName").textContent = Store.user || "";
+  $("#storeMode").textContent = { cloud: "Private to your account", server: "Your account", local: "This browser only" }[Store.mode];
+  await refreshList();
+  if (plans.length && current?.example) { current = plans[0]; tripIdx = 0; renderPlan(); renderList(); }
+}
+
+/* ---------- Login (only when served by server.js) ---------- */
+let signupMode = false;
+function showAuth() {
+  ctl?.abort();
+  current = buildExample(); plans = []; tripIdx = 0; renderPlan(); renderList();
+  $("#app").hidden = true; $("#who").hidden = true; $("#auth").hidden = false;
+  setAuthMode(false);
+  $("#authUser").focus();
+}
+function setAuthMode(signup) {
+  signupMode = signup;
+  $("#authTitle").textContent = signup ? "Create your account" : "Log in to Waypoint";
+  $("#authGo").textContent = signup ? "Create account" : "Log in";
+  $("#authSwitch").textContent = signup ? "I already have an account" : "Create an account";
+  $("#authPass").autocomplete = signup ? "new-password" : "current-password";
+  $("#authHint").hidden = !signup;
+  $("#authErr").hidden = true;
+}
+$("#authForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const err = $("#authErr"), go = $("#authGo");
+  err.hidden = true; go.disabled = true;
+  try {
+    await Store.login($("#authUser").value.trim(), $("#authPass").value, signupMode);
+    $("#authPass").value = "";
+    await enterApp();
+  } catch (x) { err.textContent = x.message; err.hidden = false; }
+  finally { go.disabled = false; }
+});
+$("#authSwitch").addEventListener("click", () => setAuthMode(!signupMode));
+$("#logout").addEventListener("click", async () => { await Store.logout(); showAuth(); });
+
+/* ---------- Downloads ---------- */
+const fileBase = (p) => `waypoint-${String(p.title || "plan").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "plan"}`;
+function downloadJson(p) {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(p, null, 2)], { type: "application/json" }));
+  const a = Object.assign(document.createElement("a"), { href: url, download: fileBase(p) + ".json" });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+// PDF: render a print-only copy of the whole plan (every trip, every section) and open the print dialog ("Save as PDF")
+function downloadPdf(p) {
+  const done = p.done || {};
+  const trips = p.trips.map((t, ti) => {
+    const sk = Object.fromEntries(t.skeleton.map((s) => [s.date, s]));
+    const route = [t.origin.city || "Home", ...t.stops.map((s) => `${s.city} (${s.nights}N)`), t.origin.city || "Home"].join(" → ");
+    const tot = t.itin.costs ? Object.values(t.itin.costs).reduce((a, v) => a + v, 0) : null;
+    return `<section class="pr-trip">
+      <h2>${esc(t.title)}</h2>
+      <p class="pr-route">${esc(route)}</p>
+      <table class="pr-facts"><tr><th>Dates</th><td>${D.fmtY(t.startDate)} – ${D.fmtY(t.endDate)} (${t.nights} nights)</td><th>Travellers</th><td>${t.travelers.adults} adult(s)${t.travelers.children ? `, ${t.travelers.children} child(ren)` : ""}</td></tr>
+        <tr><th>Budget</th><td>${t.budget ? money(t.budget.amount, t.budget.currency) + (t.budget.scope === "per_person" ? " per person" : " total") : "Not set"}</td><th>Border</th><td>${t.international === null ? "Unknown" : t.international ? "International" : "Domestic"} · ${t.pace} pace</td></tr></table>
+      <h3>Itinerary</h3>
+      ${t.itin.days.map((d, i) => { const s = sk[d.date] || {}; return `<div class="pr-day"><h4>Day ${i + 1} · ${D.dow(d.date)} ${D.fmtY(d.date)} · ${esc(s.travel ? `${s.travel.from} → ${s.travel.to}` : s.city || "")}</h4>
+        <table>${d.items.map((it) => `<tr><td class="pr-tm">${esc(it.start)}–${esc(it.end)}</td><td>${esc(it.title)}${it.place ? `<br><small>${esc(it.place)}</small>` : ""}</td><td class="pr-ty">${esc(it.type)}</td><td class="pr-num">${Number(it.cost) > 0 ? money(it.cost, t.currency) : ""}</td></tr>`).join("") || `<tr><td colspan="4">Open day</td></tr>`}</table></div>`; }).join("")}
+      ${t.itin.tips?.length ? `<h3>Notes</h3><ul>${t.itin.tips.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
+      ${(t.highlights || []).some((h) => h.places.length) ? `<h3>Places shortlist (approx. per person)</h3>
+      <table class="pr-places">${t.highlights.filter((h) => h.places.length).map((h) => h.places.map((pl, k) => `<tr><td>${k ? "" : `${esc(h.city)} · ${CAT[h.category] || esc(h.category)}${h.source === "model" ? " <small>(model, verify)</small>" : ""}`}</td><td>${esc(pl.name)}${pl.area ? `<br><small>${esc(pl.area)}</small>` : ""}</td><td class="pr-num">${priceRange(pl.min, pl.max, h.currency)}</td></tr>`).join("")).join("")}</table>
+      <div>${placesTotal(t)}</div>` : ""}
+      <h3>Booking tasks</h3>
+      <table class="pr-tasks"><tr><th></th><th>Task</th><th>Due</th><th>Status</th></tr>${t.tasks.map((x) => `<tr><td>${done[`${ti}:${x.id}`] ? "☑" : "☐"}</td><td>${esc(x.title)}</td><td>${actDate(x.due)}</td><td>${x.status === "infeasible" ? "cannot finish before departure" : x.status === "late" ? `behind (ideally ${D.fmt(x.due)})` : x.status === "urgent" ? "start now" : `${x.slack} days slack`}</td></tr>`).join("")}</table>
+      <h3>Budget</h3>
+      ${t.itin.costs ? `<table class="pr-budget">${Object.entries(t.itin.costs).filter(([, v]) => v > 0).map(([k, v]) => `<tr><td>${esc(k)}</td><td class="pr-num">${money(v, t.currency)}</td></tr>`).join("")}<tr class="pr-total"><td>Estimated total</td><td class="pr-num">${money(tot, t.currency)}</td></tr></table>` : ""}
+      <p>${esc(t.budget2?.msg || "")}</p>
+      <h3>Verification</h3>
+      <ul>${t.checks.map((c) => `<li>${c.sev === "pass" ? "✓" : c.sev === "warn" ? "!" : "✗"} ${esc(c.label)}</li>`).join("")}</ul>
+    </section>`;
+  }).join("");
+  $("#print").innerHTML = `<header class="pr-head"><h1>${esc(p.title)}</h1><p>Waypoint trip plan · generated ${new Date().toLocaleDateString([], { dateStyle: "medium" })}${Store.user ? ` · ${esc(Store.user)}` : ""}</p></header>${trips}
+    <p class="pr-foot">Costs are model estimates, not quotes. Check live fares before booking.</p>`;
+  const prev = document.title; document.title = fileBase(p); // browsers use the title as the PDF file name
+  window.print();
+  document.title = prev;
+}
+</script>
+
+</body>
+</html>
